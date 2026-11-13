@@ -14,11 +14,13 @@ rules:
     comment: >-
       An original icon in brand/, drawn by scripts/make_brand_images.py; nothing
       like Google's or Nest's logos.
-  common-modules: todo
+  common-modules:
+    status: done
+    comment: The coordinator in coordinator.py, the base entity in entity.py.
   config-flow:
-    status: todo
-    comment: Pairing with the code shown on the panel comes next.
-  config-flow-test-coverage: todo
+    status: done
+    comment: Discovery or an address, then the code the panel shows.
+  config-flow-test-coverage: done
   dependency-transparency:
     status: exempt
     comment: >-
@@ -29,42 +31,46 @@ rules:
     status: exempt
     comment: The integration provides no conditions.
   docs-high-level-description: done
-  docs-installation-instructions: todo
-  docs-removal-instructions: todo
+  docs-installation-instructions: done
+  docs-removal-instructions: done
   docs-triggers:
     status: exempt
     comment: The integration provides no triggers; presses arrive as event entities.
-  entity-event-setup: todo
-  entity-unique-id: todo
-  has-entity-name: todo
-  runtime-data: todo
-  test-before-configure: todo
-  test-before-setup: todo
+  entity-event-setup:
+    status: exempt
+    comment: Entities subscribe to nothing themselves; the coordinator handles pushes.
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure:
+    status: done
+    comment: Pairing proves the panel is there and holds the same key.
+  test-before-setup: done
   unique-config-entry:
-    status: todo
-    comment: The panel id, its Wi-Fi MAC address, will be the unique id.
+    status: done
+    comment: The panel id, its Wi-Fi MAC address.
 
   # Silver
-  action-exceptions: todo
-  config-entry-unloading: todo
+  action-exceptions: done
+  config-entry-unloading: done
   docs-configuration-parameters: todo
-  docs-installation-parameters: todo
-  entity-unavailable: todo
+  docs-installation-parameters: done
+  entity-unavailable: done
   integration-owner: done
-  log-when-unavailable: todo
-  parallel-updates: todo
+  log-when-unavailable: done
+  parallel-updates: done
   reauthentication-flow:
-    status: todo
-    comment: Pairing again when someone chooses Forget on the panel.
-  test-coverage: todo
+    status: done
+    comment: Pairing again when the panel no longer accepts the key.
+  test-coverage: done
 
   # Gold
-  devices: todo
-  diagnostics: todo
+  devices: done
+  diagnostics: done
   discovery:
-    status: todo
+    status: done
     comment: The panel announces _nesto._tcp over mDNS.
-  discovery-update-info: todo
+  discovery-update-info: done
   docs-data-update: todo
   docs-examples: todo
   docs-known-limitations: todo
@@ -75,15 +81,15 @@ rules:
   dynamic-devices:
     status: exempt
     comment: Each config entry is one panel.
-  entity-category: todo
-  entity-device-class: todo
+  entity-category: done
+  entity-device-class: done
   entity-disabled-by-default: todo
-  entity-translations: todo
-  exception-translations: todo
+  entity-translations: done
+  exception-translations: done
   icon-translations: todo
-  reconfiguration-flow: todo
+  reconfiguration-flow: done
   repair-issues:
-    status: todo
+    status: done
     comment: A panel speaking a protocol version the integration doesn't.
   stale-devices:
     status: exempt

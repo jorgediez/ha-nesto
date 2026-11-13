@@ -1,0 +1,81 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Add a Nesto Panel",
+        "description": "Enter the panel's address. It's shown on the panel under Settings → About.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "The panel's IP address or host name.",
+          "port": "The panel's port; 6170 unless you changed it."
+        }
+      },
+      "zeroconf_confirm": {
+        "title": "Pair with {name}",
+        "description": "Pair Home Assistant with {name}? The panel will show a six-digit code."
+      },
+      "pair": {
+        "title": "Pair with {name}",
+        "description": "Type the six-digit code the panel shows. It stays on screen for two minutes.",
+        "data": {
+          "code": "Code"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Pair {name} again",
+        "description": "{name} doesn't accept Home Assistant's key any more: someone chose Forget on it, or paired it with another Home Assistant. If it shows a pairing code or 'Not paired', continue. Otherwise choose Settings → Pair on the panel first, then continue."
+      },
+      "reconfigure": {
+        "title": "Change the panel's address",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "The panel's IP address or host name.",
+          "port": "The panel's port; 6170 unless you changed it."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Can't reach the panel. Check the address, and that the panel is on.",
+      "insecure": "The panel is a development build without encryption, which Home Assistant doesn't accept.",
+      "pairing_closed": "The panel is already paired. Choose Settings → Pair on the panel, then try again.",
+      "pairing_failed": "The panel rejected the pairing. Submit again to start over with a new code.",
+      "pairing_timeout": "The pairing timed out. Submit again for a new code.",
+      "unsupported_protocol": "The panel speaks a protocol version this integration doesn't. Update the panel's firmware or the integration.",
+      "wrong_code": "That's not the code the panel showed. The panel now shows a new one: type that."
+    },
+    "abort": {
+      "already_configured": "This panel is already set up.",
+      "not_a_panel": "This device doesn't announce itself as a Nesto Panel.",
+      "reauth_successful": "The panel is paired again.",
+      "reconfigure_successful": "The panel's address is updated.",
+      "wrong_device": "A different panel answers at that address."
+    }
+  },
+  "exceptions": {
+    "auth_failed": {
+      "message": "{name} at {host} doesn't accept the pairing key."
+    },
+    "cannot_connect": {
+      "message": "Can't reach {name} at {host}: {error}"
+    },
+    "cannot_send": {
+      "message": "Couldn't send to {name}: {error}"
+    },
+    "unsupported_protocol": {
+      "message": "{name} at {host} speaks protocol version {version}, which this integration doesn't."
+    }
+  },
+  "issues": {
+    "unsupported_protocol": {
+      "title": "{name} needs an update",
+      "description": "{name} speaks version {version} of the Nesto Panel protocol, which this version of the integration doesn't. Update the integration, or the panel's firmware, so both speak the same version. Home Assistant will connect again once you reload the panel's entry."
+    }
+  }
+}

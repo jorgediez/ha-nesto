@@ -13,8 +13,8 @@ the first release.)
 What makes a report actionable:
 
 - The integration's diagnostics (*Settings → Devices & services → Nesto Panel
-  → ⋮ → Download diagnostics*), once they exist. The pairing key, the
-  address and the panel id are redacted.
+  → ⋮ → Download diagnostics*). The pairing key, the address and the panel id
+  are redacted.
 - A debug log covering the moment it went wrong, with
   `custom_components.nesto: debug` in your `logger` settings.
 - For a panel that won't pair or connect, the output of
