@@ -1,0 +1,62 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - run: pip install "$(grep '^ruff==' requirements_test.txt)"
+      - run: ruff check .
+      - run: ruff format --check .
+
+  pytest:
+    name: Pytest (HA ${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest supported release, as in hacs.json. Dependabot only bumps
+          # requirements_test.txt, so this pin stays put.
+          - name: min  # 2026.11
+            python: "3.14"
+            harness: "pytest-homeassistant==2026.11.0"
+          # Newest release, as pinned in requirements_test.txt.
+          - name: latest
+            python: "3.14"
+            harness: ""
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements_test.txt
+      - name: Install test requirements
+        run: |
+          if [ -n "${{ matrix.harness }}" ]; then
+            # The entry's harness replaces the one in requirements_test.txt.
+            # pytest-homeassistant doesn't install pytest-cov, so it stays.
+            grep -v '^pytest-homeassistant==' requirements_test.txt > "$RUNNER_TEMP/requirements.txt"
+            pip install "${{ matrix.harness }}" -r "$RUNNER_TEMP/requirements.txt"
+          else
+            pip install -r requirements_test.txt
+          fi
+      - run: pytest --cov --cov-report=term-missing
+        env:
+          # Lets the tests check the min job runs the release hacs.json names.
+          HA_MIN: ${{ matrix.name == 'min' }}

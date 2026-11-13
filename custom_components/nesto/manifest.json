@@ -1,0 +1,13 @@
+{
+  "domain": "nesto",
+  "name": "Nesto Panel",
+  "categories": ["buttons_remotes", "diy_makers.boards_hardware"],
+  "codeowners": ["@jorgediez"],
+  "config_flow": false,
+  "documentation": "https://github.com/jorgediez/ha-nesto",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/jorgediez/ha-nesto/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

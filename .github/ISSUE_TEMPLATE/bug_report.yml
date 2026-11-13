@@ -1,0 +1,51 @@
+name: Bug report
+description: The integration or the panel doesn't work as expected.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Panel hardware
+      description: The device the firmware runs on.
+      placeholder: Nest Learning Thermostat (2nd generation), on its base / on a stand
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Panel firmware version
+      description: Shown in the panel's Settings → About.
+    validations:
+      required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: Integration version
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: >-
+        Settings → Devices & Services → Nesto Panel → ⋮ → Download diagnostics, and
+        attach the file. (The pairing key, address and panel id are redacted.)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant lines from the Home Assistant log, with debug logging enabled if possible.
+      render: text

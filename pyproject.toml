@@ -1,0 +1,60 @@
+[project]
+name = "ha-nesto"
+version = "0.1.0"
+description = "Home Assistant integration for Nesto Panel, a Nest Learning Thermostat (2nd generation) turned into a room panel"
+license = "Apache-2.0"
+requires-python = ">=3.14"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+# pytest-homeassistant needs Home Assistant to alias httpx before respx's plugin
+# imports it. Its fixtures still use respx; only the plugin is off.
+addopts = "-p no:respx"
+
+[tool.coverage.run]
+source = ["custom_components/nesto"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+  "ASYNC",
+  "B",    # bugbear
+  "BLE",  # blind except
+  "D",    # docstrings
+  "E",
+  "F",
+  "I",    # isort
+  "PL",   # pylint
+  "RUF",
+  "S",    # bandit
+  "SIM",
+  "UP",
+  "W",
+]
+ignore = [
+  "D202",
+  "D203",
+  "D213",
+  "E501",
+  "PLR0911",
+  "PLR0912",
+  "PLR2004",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "S101", "PLR0913", "PLR0917", "PLC0415", "SLF001"]
+# A self-contained client library: timeouts are part of its API.
+"custom_components/**/client.py" = ["ASYNC109"]
+# Command-line tools for working against a real panel or the simulator.
+"scripts/**" = ["ASYNC240", "BLE001", "D", "PLC0415", "PLR0915", "S101", "T201"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components", "homeassistant"]
+combine-as-imports = true

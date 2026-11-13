@@ -1,0 +1,6 @@
+# Home Assistant's own test package, numbered like the release it pins, with
+# pytest and its plugins to match. Dependabot skips its betas.
+pytest-homeassistant==2026.11.0
+# It doesn't install the coverage plugin.
+pytest-cov==7.1.0
+ruff==0.17.3
