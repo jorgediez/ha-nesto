@@ -3,4 +3,4 @@
 pytest-homeassistant==2026.11.1
 # It doesn't install the coverage plugin.
 pytest-cov==7.1.0
-ruff==0.17.3
+ruff==0.17.4
