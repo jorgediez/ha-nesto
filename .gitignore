@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local tooling state. The project's agent skills are shared; the rest of
+# .claude/ (local settings, session state) is not.
+.claude/*
+!.claude/skills/
+
+# Local scratch: screenshots, captures, throwaway notes.
+tmp/
