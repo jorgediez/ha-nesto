@@ -10,8 +10,10 @@ rules:
     status: exempt
     comment: The panel pushes everything over one connection; nothing is polled.
   brands:
-    status: todo
-    comment: An original icon, nothing like Google's, before the first release.
+    status: done
+    comment: >-
+      An original icon in brand/, drawn by scripts/make_brand_images.py; nothing
+      like Google's or Nest's logos.
   common-modules: todo
   config-flow:
     status: todo
