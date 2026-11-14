@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from collections.abc import Callable
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -20,6 +21,7 @@ from custom_components.nesto.const import DOMAIN
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.util import dt as dt_util
 
 from .common import KEY, PANEL_ID, TITLE, ClientFactory, make_hello
 
@@ -262,6 +264,28 @@ async def test_unloading_stops_reconnecting(
 # Synchronising ---------------------------------------------------------------
 
 
+async def at_the_next_hour(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, before: Callable[[], None]
+) -> datetime:
+    """Reach the next whole hour, calling `before` a second ahead of it.
+
+    The hourly listener is scheduled from the real now the test starts at,
+    so the hour comes from that now, never a fixed date. Firing a second
+    early has the listener schedule itself for the hour, which the tick then
+    reaches.
+    """
+    now = dt_util.utcnow()
+    hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    freezer.move_to(hour - timedelta(seconds=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    before()
+    freezer.tick(timedelta(seconds=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    return hour
+
+
 async def test_the_time_every_hour(
     hass: HomeAssistant,
     init_integration: MockConfigEntry,
@@ -269,18 +293,9 @@ async def test_the_time_every_hour(
     freezer: FrozenDateTimeFactory,
 ) -> None:
     client = clients.last
-    # Jumping ahead from the real now passes earlier hours; let those go by.
-    freezer.move_to("2026-11-14 10:59:59+00:00")
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
-    client.sent.clear()
-
-    freezer.tick(timedelta(seconds=1))
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
+    hour = await at_the_next_hour(hass, freezer, client.sent.clear)
     assert sent_types(client) == ["time"]
-    expected = datetime(2026, 11, 14, 11, tzinfo=UTC)
-    assert client.sent[0]["utc_ms"] == int(expected.timestamp() * 1000)
+    assert client.sent[0]["utc_ms"] == int(hour.timestamp() * 1000)
 
     freezer.tick(timedelta(minutes=30))
     async_fire_time_changed(hass)
@@ -295,11 +310,17 @@ async def test_the_hourly_time_waits_for_a_connection(
     freezer: FrozenDateTimeFactory,
 ) -> None:
     client = clients.last
-    client.sent.clear()
-    client.authenticated = False  # dropped, not yet reported
-    freezer.move_to("2026-11-14 11:00:00+00:00")
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
+    coordinator = init_integration.runtime_data
+
+    def drop() -> None:
+        client.sent.clear()
+        client.authenticated = False  # dropped, not yet reported
+
+    with patch.object(
+        coordinator, "async_send_time", wraps=coordinator.async_send_time
+    ) as send_time:
+        await at_the_next_hour(hass, freezer, drop)
+    send_time.assert_awaited_once()  # the hour came
     assert client.sent == []
 
 
@@ -309,10 +330,14 @@ async def test_the_hourly_time_survives_a_broken_send(
     clients: ClientFactory,
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    clients.last.send.side_effect = CannotConnect("broken pipe")
-    freezer.move_to("2026-11-14 11:00:00+00:00")
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
+    send = clients.last.send
+
+    def break_it() -> None:
+        send.reset_mock()
+        send.side_effect = CannotConnect("broken pipe")
+
+    await at_the_next_hour(hass, freezer, break_it)
+    send.assert_awaited_once()  # the hour came, and the send failed
     assert init_integration.state is ConfigEntryState.LOADED
 
 
