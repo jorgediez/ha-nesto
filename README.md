@@ -1,12 +1,13 @@
 # Nesto Panel for Home Assistant
 
-[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories/)
+[![Marketplace](https://img.shields.io/badge/Marketplace-Default-41BDF5.svg?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/integrations/marketplace/)
 [![Validate](https://github.com/jorgediez/ha-nesto/actions/workflows/validate.yml/badge.svg)](https://github.com/jorgediez/ha-nesto/actions/workflows/validate.yml)
 [![Tests](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml/badge.svg)](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml)
-[![License](https://img.shields.io/github/license/jorgediez/ha-nesto)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Work in progress.** Nothing here can be installed yet: this is the
-> protocol and its client, with pairing and the entities to come.
+> **Work in progress.** A panel can be added and paired, and stays
+> connected; the room's controls, the display, sensors and notifications are
+> still to come.
 
 Turns a Nest Learning Thermostat (2nd generation), running the
 [Nesto firmware](https://github.com/jorgediez/nesto-firmware), into a room
@@ -38,7 +39,74 @@ Planned for the first release:
 
 ## Installation
 
-Not yet installable.
+Requires Home Assistant 2026.11 or newer, and a panel running the Nesto
+firmware.
+
+Until the integration is in the Marketplace's default list, add it from its
+link: in *Settings → Marketplace*, choose **Add from link** (it needs a GitHub
+connection), enter `https://github.com/jorgediez/ha-nesto`, then **Install**.
+
+Manually: copy `custom_components/nesto` into your Home Assistant's
+`custom_components` folder, and restart.
+
+## Configuration
+
+A panel on the same network shows up under *Settings → Devices & services →
+Discovered*. Choose **Add**, and the panel shows a six-digit code: type it in
+Home Assistant. If discovery doesn't reach your panel (another VLAN, say), add
+it with **Add integration → Nesto Panel** and the address and port the
+panel shows under *Settings → About*.
+
+A panel pairs with one Home Assistant at a time. A panel already paired with
+another one refuses: choose *Settings → Pair* on the panel first, then add it.
+
+- **Pairing again:** if someone chooses *Settings → Forget* on the panel, or
+  pairs it with another Home Assistant, the panel stops accepting this one's
+  key and Home Assistant asks you to pair again. Follow the notice, and type
+  the new code.
+- **A new address:** a discovered panel's address is followed by itself. For
+  one added by hand, choose **Reconfigure** on its entry; Home Assistant checks
+  it's still the same panel.
+
+## Entities
+
+- **Identify** (button, under configuration): the panel wakes, pulses its
+  backlight and beeps three times, so you can tell which one it is.
+
+Entities are unavailable while the panel can't be reached; Home Assistant
+keeps trying, every minute at most.
+
+## Troubleshooting
+
+To see what passes between Home Assistant and the panel, turn on debug
+logging, from the integration's page (**Enable debug logging**) or in
+`configuration.yaml`:
+
+```yaml
+logger:
+  logs:
+    custom_components.nesto: debug
+```
+
+The integration's diagnostics (*Settings → Devices & services → Nesto Panel
+→ ⋮ → Download diagnostics*) say how the panel and its connection stand. The
+pairing key, the address and the panel id are left out.
+
+## Removal
+
+Delete the panel's entry in *Settings → Devices & services*. If the panel is
+reachable, it forgets Home Assistant's key and waits to be paired again;
+otherwise choose *Settings → Forget* on it. Then uninstall the integration from
+the Marketplace (**⋮ → Uninstall**), or delete `custom_components/nesto`, and
+restart.
+
+## Privacy
+
+Nothing goes over the internet: the panel and Home Assistant talk only on your
+network. Home Assistant keeps the panel's address and the pairing key in its
+config entry. The key works like a password for the panel: anyone holding it
+can act as this Home Assistant towards the panel, so it's left out of the
+diagnostics, along with the address and the panel id.
 
 ## Writing to the panel
 
