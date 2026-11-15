@@ -16,10 +16,18 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr, issue_registry as ir
-from homeassistant.helpers.event import async_track_utc_time_change
+from homeassistant.helpers import (
+    area_registry as ar,
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_utc_time_change,
+)
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -32,6 +40,15 @@ from .client import (
     UnsupportedProtocol,
 )
 from .const import CONF_KEY, CONF_PANEL_ID, DOMAIN, RECONNECT_DELAYS
+from .room import (
+    IntentError,
+    Keys,
+    Layout,
+    async_handle_intent,
+    build_layout,
+    diff,
+    item_state,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,6 +94,16 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         self._was_connected = False
         self._shutting_down = False
         self.data = PanelData()
+        # What the panel shows, as last sent, and the states it knows.
+        self._keys = Keys()
+        self.layout: Layout | None = None
+        self._known: dict[str, dict[str, Any]] = {}
+        self._send_lock = asyncio.Lock()
+        self._room_changed = False
+        self._room_task: asyncio.Task[None] | None = None
+        self._tracked: frozenset[str] = frozenset()
+        self._untrack_states: CALLBACK_TYPE | None = None
+        self._left_out: tuple[str, ...] = ()
 
     @property
     def panel_id(self) -> str:
@@ -133,15 +160,98 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         # Every setting left out takes the panel's own default; the settings
         # entities fill this in later.
         await self._async_send({"t": "config"})
-        await self._async_send(
-            {
-                "t": "layout",
-                "rev": self._next_layout_rev(),
-                "title": self.config_entry.title,
-                "items": [],
-            }
-        )
-        await self._async_send({"t": "states", "full": True, "items": {}})
+        async with self._send_lock:
+            await self._async_send_room(self.build_layout())
+
+    # The room --------------------------------------------------------------------
+
+    def build_layout(self) -> Layout:
+        """Return what the panel should show now."""
+        entry = self.config_entry
+        layout = build_layout(self.hass, entry, self.panel_id, self._keys)
+        if layout.left_out != self._left_out:
+            self._left_out = layout.left_out
+            if layout.left_out:
+                _LOGGER.warning(
+                    "Panel %s shows 48 items at most; left out: %s",
+                    entry.title,
+                    ", ".join(layout.left_out),
+                )
+        return layout
+
+    async def _async_send_room(self, layout: Layout) -> None:
+        """Send a layout and every item's state (sections 9 and 10)."""
+        states = {item.key: item_state(self.hass, item) for item in layout.items}
+        await self._async_send(layout.as_message(self._next_layout_rev()))
+        self.layout = layout
+        self._known = {}
+        await self._async_send({"t": "states", "full": True, "items": states})
+        self._known = states
+        self._track(layout)
+
+    @callback
+    def _track(self, layout: Layout) -> None:
+        """Follow the states of what the panel shows, or waits to show."""
+        wanted = frozenset(layout.entity_ids | layout.waiting)
+        if wanted == self._tracked:
+            return
+        self._untrack()
+        self._tracked = wanted
+        if wanted:
+            self._untrack_states = async_track_state_change_event(
+                self.hass, wanted, self._async_room_changed
+            )
+
+    @callback
+    def _untrack(self) -> None:
+        if self._untrack_states is not None:
+            self._untrack_states()
+            self._untrack_states = None
+        self._tracked = frozenset()
+
+    @callback
+    def _async_room_changed(self, _event: Event | None = None) -> None:
+        """Note that the room changed, and send what changed, soon.
+
+        Changes coming together are sent together: the sender builds the room
+        when it runs, from what is current then.
+        """
+        self._room_changed = True
+        if self._room_task is None or self._room_task.done():
+            self._room_task = self.config_entry.async_create_background_task(
+                self.hass, self._async_send_changes(), name=f"{DOMAIN} room"
+            )
+
+    async def _async_send_changes(self) -> None:
+        async with self._send_lock:
+            while self._room_changed:
+                self._room_changed = False
+                if not self.connected or self.layout is None:
+                    return
+                try:
+                    await self._async_send_room_changes(self.layout)
+                except NestoError as err:
+                    # A broken connection reports itself through on_close.
+                    _LOGGER.debug("Couldn't update the panel: %s", err)
+                    return
+
+    async def _async_send_room_changes(self, sent: Layout) -> None:
+        """Send a new layout if it changed, else the states that changed."""
+        layout = self.build_layout()
+        if (layout.title, layout.items) != (sent.title, sent.items):
+            await self._async_send_room(layout)
+            return
+        # The same items; what waits for a state may differ.
+        self.layout = layout
+        self._track(layout)
+        changes: dict[str, dict[str, Any]] = {}
+        for item in layout.items:
+            known = self._known.setdefault(item.key, {})
+            if changed := diff(known, item_state(self.hass, item)):
+                changes[item.key] = changed
+                known.update(changed)
+        if changes:
+            await self._async_send({"t": "states", "full": False, "items": changes})
 
     def _next_layout_rev(self) -> int:
         # Increasing for this panel even across restarts of Home Assistant,
@@ -166,12 +276,26 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
 
     @callback
     def async_start(self) -> None:
-        """Send the time every hour, which also catches daylight saving."""
-        self.config_entry.async_on_unload(
+        """Send the time every hour, and follow changes to the room.
+
+        The hourly time also catches daylight saving. The registries say when
+        entities join or leave the room, or the panel's device moves.
+        """
+        entry = self.config_entry
+        entry.async_on_unload(
             async_track_utc_time_change(
                 self.hass, self._async_hourly, minute=0, second=0
             )
         )
+        for event_type in (
+            ar.EVENT_AREA_REGISTRY_UPDATED,
+            dr.EVENT_DEVICE_REGISTRY_UPDATED,
+            er.EVENT_ENTITY_REGISTRY_UPDATED,
+        ):
+            entry.async_on_unload(
+                self.hass.bus.async_listen(event_type, self._async_room_changed)
+            )
+        entry.async_on_unload(self._untrack)
 
     async def _async_hourly(self, now: datetime) -> None:
         try:
@@ -219,7 +343,13 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
     @callback
     def _on_message(self, message: dict[str, Any]) -> None:
         kind = message["t"]
-        if "id" in message:
+        if kind == "intent" and "id" in message and self.client is not None:
+            self.config_entry.async_create_background_task(
+                self.hass,
+                self._async_intent(self.client, message),
+                name=f"{DOMAIN} intent",
+            )
+        elif "id" in message:
             self._answer(message)
         elif kind == "ready":
             _LOGGER.debug("Panel %s is ready", self.config_entry.title)
@@ -230,10 +360,7 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
     def _answer(self, request: dict[str, Any]) -> None:
         """Answer the panel's requests that nothing here handles yet."""
         kind = request["t"]
-        if kind == "intent":
-            # The layout has no items yet, so any key is stale (section 11).
-            error = ("unknown_key", f"No item {request.get('key')}")
-        elif kind == "image_next":
+        if kind == "image_next":
             error = ("no_images", "No carousel images are configured")
         else:
             error = ("unknown_type", f"Unknown request {kind}")
@@ -245,6 +372,27 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
             self._async_respond(client, request["id"], *error),
             name=f"{DOMAIN} answer {kind}",
         )
+
+    async def _async_intent(self, client: NestoClient, request: dict[str, Any]) -> None:
+        """Carry out an intent, and answer once the service call returns."""
+        try:
+            if self.layout is None:
+                raise IntentError("unknown_key", f"No item {request.get('key')}")
+            await async_handle_intent(self.hass, self.layout, request)
+            _LOGGER.debug(
+                "Panel %s: %s on %s",
+                self.config_entry.title,
+                request.get("action"),
+                request.get("key"),
+            )
+        except IntentError as err:
+            _LOGGER.debug("Panel %s: intent failed: %s", self.config_entry.title, err)
+            await self._async_respond(client, request["id"], err.code, str(err))
+            return
+        try:
+            await client.respond(request["id"])
+        except NestoError as err:
+            _LOGGER.debug("Couldn't answer the panel: %s", err)
 
     @staticmethod
     async def _async_respond(

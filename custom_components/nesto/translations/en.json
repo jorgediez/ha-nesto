@@ -58,6 +58,59 @@
       "wrong_device": "A different panel answers at that address."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "What the panel shows",
+        "data": {
+          "mode": "Show"
+        },
+        "data_description": {
+          "mode": "The room: what's in the area you put the panel in, kept up to date as you move entities or the panel. Or entities you pick yourself."
+        }
+      },
+      "room": {
+        "title": "The {area} room",
+        "description": "The panel shows the lights, switches, fans, scenes, scripts, climate and covers in {area}. To show another room, move the panel to that area on its device page.",
+        "data": {
+          "exclude": "Leave out",
+          "sensors": "Add sensors"
+        },
+        "data_description": {
+          "exclude": "Entities in {area} the panel shouldn't show.",
+          "sensors": "Sensors to show too, read only: a room's sensors aren't shown unless you pick them here."
+        }
+      },
+      "room_no_area": {
+        "title": "The panel's room",
+        "description": "The panel isn't in an area yet, so it shows nothing. Put it in one on its device page: it then shows the lights, switches, fans, scenes, scripts, climate and covers there.",
+        "data": {
+          "sensors": "Add sensors"
+        },
+        "data_description": {
+          "sensors": "Sensors to show too, read only: a room's sensors aren't shown unless you pick them here."
+        }
+      },
+      "manual": {
+        "title": "Pick the entities",
+        "description": "The panel shows these, grouped by kind: lights, climate, covers, switches, scenes and sensors. With two or more lights it adds an 'All lights' item.",
+        "data": {
+          "entities": "Entities"
+        },
+        "data_description": {
+          "entities": "Lights, switches, input booleans, fans without speed control, scenes, scripts, climate, covers and sensors. At most 48."
+        }
+      }
+    }
+  },
+  "selector": {
+    "mode": {
+      "options": {
+        "room": "The panel's room",
+        "manual": "Entities I pick"
+      }
+    }
+  },
   "exceptions": {
     "auth_failed": {
       "message": "{name} at {host} doesn't accept the pairing key."

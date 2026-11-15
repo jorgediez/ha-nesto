@@ -1,0 +1,760 @@
+"""The room: which entities the panel shows, their states, and its intents."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any
+from unittest.mock import patch
+
+import pytest
+from pytest_homeassistant.common import MockConfigEntry, async_mock_service
+
+from custom_components.nesto import room
+from custom_components.nesto.client import CannotConnect
+from custom_components.nesto.const import (
+    CONF_ENTITIES,
+    CONF_EXCLUDE,
+    CONF_MODE,
+    CONF_SENSORS,
+    DOMAIN,
+    MODE_MANUAL,
+    MODE_ROOM,
+)
+from homeassistant.core import HomeAssistant, ServiceCall, State
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import (
+    area_registry as ar,
+    device_registry as dr,
+    entity_registry as er,
+)
+from homeassistant.helpers.entity import EntityCategory
+
+from .common import PANEL_ID, TITLE, ClientFactory
+
+LIGHT_ATTRS = {
+    "friendly_name": "Living room Ceiling",
+    "supported_color_modes": ["color_temp", "hs"],
+    "color_mode": "color_temp",
+    "brightness": 128,
+    "color_temp_kelvin": 2700,
+    "min_color_temp_kelvin": 2200,
+    "max_color_temp_kelvin": 6500,
+    "hs_color": [30.4, 50.6],
+    "effect_list": ["None", "Candle", "Fireplace"],
+    "effect": "None",
+}
+# entity id: (state, attributes)
+ROOM: dict[str, tuple[str, dict[str, Any]]] = {
+    "light.ceiling": ("on", LIGHT_ATTRS),
+    "light.lamp": (
+        "off",
+        {"friendly_name": "Reading lamp", "supported_color_modes": ["onoff"]},
+    ),
+    "climate.radiator": (
+        "heat",
+        {
+            "friendly_name": "Radiator",
+            "supported_features": 1 | 16,
+            "hvac_modes": ["off", "heat", "auto"],
+            "preset_modes": ["eco", "comfort"],
+            "min_temp": 5,
+            "max_temp": 30,
+            "current_temperature": 20.5,
+            "temperature": 21,
+            "hvac_action": "heating",
+            "preset_mode": "eco",
+        },
+    ),
+    "cover.blind": (
+        "open",
+        {
+            "friendly_name": "Window blind",
+            "supported_features": 1 | 2 | 4 | 8,
+            "device_class": "blind",
+            "current_position": 70,
+        },
+    ),
+    "switch.fan_plug": (
+        "off",
+        {"friendly_name": "Fan plug", "device_class": "outlet"},
+    ),
+    "fan.simple": ("on", {"friendly_name": "Ceiling fan", "supported_features": 0}),
+    "fan.speeds": ("on", {"friendly_name": "Speed fan", "supported_features": 1}),
+    "scene.film": ("2026-11-15T10:00:00", {"friendly_name": "Film night"}),
+    "script.bedtime": ("off", {"friendly_name": "Bedtime"}),
+    "sensor.co2": (
+        "612.345",
+        {"friendly_name": "CO2", "unit_of_measurement": "ppm"},
+    ),
+}
+
+
+def register(
+    hass: HomeAssistant, entity_id: str, area_id: str | None, **kwargs: Any
+) -> er.RegistryEntry:
+    domain, object_id = entity_id.split(".")
+    entities = er.async_get(hass)
+    entry = entities.async_get_or_create(
+        domain, "demo", object_id, suggested_object_id=object_id, **kwargs
+    )
+    assert entry.entity_id == entity_id
+    return entities.async_update_entity(entity_id, area_id=area_id)
+
+
+async def put_panel_in(hass: HomeAssistant, area_id: str | None) -> None:
+    devices = dr.async_get(hass)
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    device = devices.async_get_device_by_identifier((DOMAIN, PANEL_ID), entry.entry_id)
+    assert device is not None
+    devices.async_update_device(device.id, area_id=area_id)
+    await hass.async_block_till_done()
+
+
+@pytest.fixture
+def area(hass: HomeAssistant) -> ar.AreaEntry:
+    """A living room with something of every kind in it."""
+    living = ar.async_get(hass).async_create("Living room")
+    for entity_id, (state, attributes) in ROOM.items():
+        register(hass, entity_id, living.id)
+        hass.states.async_set(entity_id, state, attributes)
+    # Not controls for a room.
+    register(
+        hass, "switch.child_lock", living.id, entity_category=EntityCategory.CONFIG
+    )
+    hass.states.async_set("switch.child_lock", "off")
+    register(hass, "switch.hidden", living.id, hidden_by=er.RegistryEntryHider.USER)
+    hass.states.async_set("switch.hidden", "off")
+    # Elsewhere.
+    register(hass, "switch.kitchen", None)
+    hass.states.async_set("switch.kitchen", "off")
+    return living
+
+
+@pytest.fixture
+async def in_room(
+    hass: HomeAssistant,
+    area: ar.AreaEntry,
+    init_integration: MockConfigEntry,
+    clients: ClientFactory,
+) -> MockConfigEntry:
+    """The panel, set up, then moved into the living room."""
+    clients.last.sent.clear()
+    await put_panel_in(hass, area.id)
+    return init_integration
+
+
+def last(client, kind: str) -> dict[str, Any]:
+    return next(m for m in reversed(client.sent) if m["t"] == kind)
+
+
+def items_by_name(layout: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {item["name"]: item for item in layout["items"]}
+
+
+# Which entities ----------------------------------------------------------------
+
+
+async def test_moving_the_panel_shows_its_room(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    client = clients.last
+    assert [m["t"] for m in client.sent] == ["layout", "states"]
+    layout = last(client, "layout")
+    assert layout["title"] == "Living room"
+    # Appendix A's order; the area's name left off the front of names.
+    assert [(i["name"], i["kind"]) for i in layout["items"]] == [
+        ("All lights", "light"),
+        ("Ceiling", "light"),
+        ("Reading lamp", "light"),
+        ("Radiator", "climate"),
+        ("Window blind", "cover"),
+        ("Ceiling fan", "switch"),
+        ("Fan plug", "switch"),
+        ("Bedtime", "scene"),
+        ("Film night", "scene"),
+    ]
+    states = last(client, "states")
+    assert states["full"] is True
+    assert set(states["items"]) == {item["key"] for item in layout["items"]}
+
+
+async def test_the_panel_without_an_area_shows_nothing(
+    hass: HomeAssistant, area: ar.AreaEntry, init_integration: MockConfigEntry, clients
+) -> None:
+    layout = last(clients.last, "layout")
+    assert layout["title"] == TITLE
+    assert layout["items"] == []
+
+
+async def test_leaving_the_area_empties_the_panel(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    await put_panel_in(hass, None)
+    layout = last(clients.last, "layout")
+    assert (layout["title"], layout["items"]) == (TITLE, [])
+
+
+async def test_entities_joining_and_leaving(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory, area
+) -> None:
+    client = clients.last
+    register(hass, "switch.new", area.id)
+    await hass.async_block_till_done()
+    assert "switch.new" in in_room.runtime_data.layout.waiting  # no state yet
+    hass.states.async_set("switch.new", "on", {"friendly_name": "New"})
+    await hass.async_block_till_done()
+    assert "New" in items_by_name(last(client, "layout"))
+
+    er.async_get(hass).async_update_entity("switch.new", area_id=None)
+    await hass.async_block_till_done()
+    assert "New" not in items_by_name(last(client, "layout"))
+
+
+async def test_an_entity_follows_its_device_unless_put_elsewhere(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory, area
+) -> None:
+    devices = dr.async_get(hass)
+    device = devices.async_get_or_create(
+        config_entry_id=in_room.entry_id, identifiers={("demo", "strip")}
+    )
+    entities = er.async_get(hass)
+    entities.async_get_or_create(
+        "light",
+        "demo",
+        "strip",
+        suggested_object_id="strip",
+        device_id=device.id,
+        original_name="Strip",
+    )
+    hass.states.async_set("light.strip", "off", {"friendly_name": "Strip"})
+    devices.async_update_device(device.id, area_id=area.id)
+    await hass.async_block_till_done()
+    assert "Strip" in items_by_name(last(clients.last, "layout"))
+
+    kitchen = ar.async_get(hass).async_create("Kitchen")
+    entities.async_update_entity("light.strip", area_id=kitchen.id)
+    await hass.async_block_till_done()
+    assert "Strip" not in items_by_name(last(clients.last, "layout"))
+
+
+async def test_renaming_the_area_renames_the_title(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory, area
+) -> None:
+    ar.async_get(hass).async_update(area.id, name="Lounge")
+    await hass.async_block_till_done()
+    assert last(clients.last, "layout")["title"] == "Lounge"
+
+
+async def test_room_options(
+    hass: HomeAssistant, area: ar.AreaEntry, config_entry: MockConfigEntry, clients
+) -> None:
+    config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        config_entry,
+        options={
+            CONF_MODE: MODE_ROOM,
+            CONF_EXCLUDE: ["script.bedtime"],
+            CONF_SENSORS: ["sensor.co2"],
+        },
+    )
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    await put_panel_in(hass, area.id)
+    names = items_by_name(last(clients.last, "layout"))
+    assert "Bedtime" not in names
+    assert names["CO2"] == {
+        "key": names["CO2"]["key"],
+        "kind": "sensor",
+        "name": "CO2",
+        "icon": "sensor",
+        "features": {"unit": "ppm"},
+    }
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+async def test_manual_mode(
+    hass: HomeAssistant, area: ar.AreaEntry, config_entry: MockConfigEntry, clients
+) -> None:
+    hass.states.async_set("media_player.tv", "on")
+    config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        config_entry,
+        options={
+            CONF_MODE: MODE_MANUAL,
+            CONF_ENTITIES: [
+                "sensor.co2",
+                "switch.kitchen",
+                "light.lamp",
+                "media_player.tv",  # no kind for it
+                "fan.speeds",  # nor for a fan with speeds
+            ],
+        },
+    )
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    await put_panel_in(hass, area.id)  # manual mode ignores the area
+    layout = last(clients.last, "layout")
+    assert layout["title"] == TITLE
+    assert [i["name"] for i in layout["items"]] == ["Reading lamp", "kitchen", "CO2"]
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+async def test_the_limits(
+    hass: HomeAssistant,
+    config_entry: MockConfigEntry,
+    clients: ClientFactory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    switches = [f"switch.s{n:02}" for n in range(50)]
+    for entity_id in switches:
+        hass.states.async_set(entity_id, "off", {"friendly_name": "x" * 80})
+    config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        config_entry, options={CONF_MODE: MODE_MANUAL, CONF_ENTITIES: switches}
+    )
+    caplog.set_level(logging.WARNING)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    items = last(clients.last, "layout")["items"]
+    assert len(items) == 48
+    assert len(items[0]["name"]) == 64
+    assert items[0]["name"].endswith("…")
+    assert caplog.text.count("48 items at most") == 1
+    hass.states.async_set("switch.s00", "on", {"friendly_name": "x" * 80})
+    await hass.async_block_till_done()
+    assert caplog.text.count("48 items at most") == 1  # said once
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+# Features and icons ------------------------------------------------------------
+
+
+async def test_layout_features(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    names = items_by_name(last(clients.last, "layout"))
+    assert names["All lights"]["features"] == {"brightness": True}
+    assert names["All lights"]["icon"] == "lightbulb-group"
+    assert names["Ceiling"]["features"] == {
+        "brightness": True,
+        "color_temp": {"min_k": 2200, "max_k": 6500},
+        "color": True,
+        "effects": ["Candle", "Fireplace"],
+    }
+    assert "features" not in names["Reading lamp"]  # on and off only
+    assert names["Radiator"]["features"] == {
+        "target": "single",
+        "step": 0.5,
+        "unit": "°C",
+        "hvac_modes": ["off", "heat", "auto"],
+        "presets": ["eco", "comfort"],
+        "fan_modes": [],
+        "min": 5,
+        "max": 30,
+    }
+    assert names["Window blind"]["features"] == {
+        "open": True,
+        "close": True,
+        "stop": True,
+        "position": True,
+        "tilt": False,
+    }
+    assert names["Window blind"]["icon"] == "blind"
+    assert names["Fan plug"]["icon"] == "power-socket"
+    assert names["Ceiling fan"]["icon"] == "fan"
+    assert names["Bedtime"]["icon"] == "script"
+
+
+@pytest.mark.parametrize(
+    ("supported", "target"), [(2, "range"), (3, "range"), (1, "single"), (0, "none")]
+)
+def test_climate_targets(hass: HomeAssistant, supported: int, target: str) -> None:
+    features = room.climate_features(
+        hass, {"supported_features": supported, "target_temp_step": 1}
+    )
+    assert features["target"] == target
+    assert features["step"] == 1
+
+
+@pytest.mark.parametrize(
+    ("entity_id", "attributes", "icon"),
+    [
+        ("light.a", {"icon": "mdi:ceiling-light"}, "ceiling-light"),
+        ("light.a", {"icon": "mdi:lightbulb-group-off"}, "lightbulb-group"),
+        ("light.a", {"icon": "mdi:lightbulb-outline"}, "lightbulb"),
+        ("light.a", {"icon": "mdi:floor-lamp-outline"}, "lamp"),
+        ("switch.a", {"icon": "mdi:television"}, "tv"),
+        ("switch.a", {"icon": "mdi:rocket"}, None),
+        ("light.a", {}, None),
+        ("sensor.a", {"device_class": "temperature"}, "thermometer"),
+        ("cover.a", {"device_class": "garage"}, "garage"),
+        ("climate.a", {}, "thermostat"),
+    ],
+)
+def test_icons(entity_id: str, attributes: dict[str, Any], icon: str | None) -> None:
+    assert room.icon_for(State(entity_id, "on", attributes)) == icon
+
+
+async def test_names_lose_only_a_leading_area(hass: HomeAssistant) -> None:
+    area = ar.async_get(hass).async_create("Living room")
+    assert room._short_name("living room lamp", area) == "Lamp"
+    assert room._short_name("Living room", area) == "Living room"
+    assert (
+        room._short_name("Lamp in the Living room", area) == "Lamp in the Living room"
+    )
+    assert room._short_name("Living room lamp", None) == "Living room lamp"
+
+
+# States ------------------------------------------------------------------------
+
+
+async def test_full_states(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    client = clients.last
+    keys = {i["name"]: i["key"] for i in last(client, "layout")["items"]}
+    states = {name: last(client, "states")["items"][key] for name, key in keys.items()}
+    assert states["Ceiling"] == {
+        "available": True,
+        "on": True,
+        "brightness": 50,
+        "color_temp_k": 2700,
+        "hs": [30, 51],
+        "effect": None,
+        "mode": "color_temp",
+    }
+    assert states["All lights"] == {
+        "available": True,
+        "on": True,
+        "brightness": 50,
+        "color_temp_k": None,
+        "hs": None,
+        "effect": None,
+        "mode": "brightness",
+    }
+    assert states["Reading lamp"]["on"] is False
+    assert states["Radiator"] == {
+        "available": True,
+        "hvac_mode": "heat",
+        "hvac_action": "heating",
+        "current": 20.5,
+        "target": 21,
+        "target_low": None,
+        "target_high": None,
+        "preset": "eco",
+        "fan_mode": None,
+        "current_humidity": None,
+    }
+    assert states["Window blind"] == {
+        "available": True,
+        "state": "open",
+        "position": 70,
+        "tilt": None,
+    }
+    assert states["Ceiling fan"] == {"available": True, "on": True}
+    assert states["Film night"] == {"available": True}
+
+
+async def test_only_changes_are_sent(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    client = clients.last
+    keys = {i["name"]: i["key"] for i in last(client, "layout")["items"]}
+    client.sent.clear()
+
+    hass.states.async_set("light.ceiling", "on", {**LIGHT_ATTRS, "brightness": 255})
+    await hass.async_block_till_done()
+    assert client.sent == [
+        {
+            "t": "states",
+            "full": False,
+            "items": {
+                keys["Ceiling"]: {"brightness": 100},
+                keys["All lights"]: {"brightness": 100},
+            },
+        }
+    ]
+
+    client.sent.clear()
+    hass.states.async_set("light.ceiling", "on", {**LIGHT_ATTRS, "brightness": 255})
+    hass.states.async_set(
+        "switch.fan_plug", "off", {**ROOM["switch.fan_plug"][1], "x": 1}
+    )
+    await hass.async_block_till_done()
+    assert client.sent == []  # nothing the panel shows changed
+
+
+async def test_unavailable_and_back(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    client = clients.last
+    key = items_by_name(last(client, "layout"))["Fan plug"]["key"]
+    attributes = {"friendly_name": "Fan plug", "device_class": "outlet"}
+    client.sent.clear()
+    hass.states.async_set("switch.fan_plug", "unavailable", attributes)
+    await hass.async_block_till_done()
+    assert last(client, "states")["items"] == {key: {"available": False}}
+    hass.states.async_set("switch.fan_plug", "on", attributes)
+    await hass.async_block_till_done()
+    assert last(client, "states")["items"] == {key: {"available": True, "on": True}}
+
+
+async def test_a_renamed_entity_sends_a_new_layout(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    client = clients.last
+    before = items_by_name(last(client, "layout"))
+    client.sent.clear()
+    hass.states.async_set("switch.fan_plug", "off", {"friendly_name": "Heater plug"})
+    await hass.async_block_till_done()
+    assert [m["t"] for m in client.sent] == ["layout", "states"]
+    after = items_by_name(last(client, "layout"))
+    # Keys stay with their entities.
+    assert after["Heater plug"]["key"] == before["Fan plug"]["key"]
+    assert after["Ceiling"]["key"] == before["Ceiling"]["key"]
+
+
+async def test_changes_wait_for_a_connection(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    client = clients.last
+    client.sent.clear()
+    client.authenticated = False  # dropped, not yet reported
+    hass.states.async_set("switch.fan_plug", "on", {"friendly_name": "Fan plug"})
+    await hass.async_block_till_done()
+    assert client.sent == []
+
+
+async def test_a_broken_send_is_left_to_the_connection(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    clients.last.send.side_effect = CannotConnect("broken pipe")
+    hass.states.async_set("switch.fan_plug", "on", {"friendly_name": "Fan plug"})
+    await hass.async_block_till_done()
+    assert in_room.runtime_data.data.connected
+
+
+@pytest.mark.parametrize(
+    ("state", "options", "value"),
+    [
+        ("612.345", {}, "612.345"),
+        ("612.345", {"sensor": {"suggested_display_precision": 1}}, "612.3"),
+        ("612.345", {"sensor": {"display_precision": 0}}, "612"),
+        ("high", {"sensor": {"display_precision": 0}}, "high"),
+        ("unknown", {}, "—"),
+    ],
+)
+async def test_sensor_values(
+    hass: HomeAssistant, state: str, options: dict[str, Any], value: str
+) -> None:
+    entry = register(hass, "sensor.co2", None)
+    for domain, domain_options in options.items():
+        er.async_get(hass).async_update_entity_options(
+            entry.entity_id, domain, domain_options
+        )
+    assert room.sensor_value(hass, State("sensor.co2", state)) == value
+
+
+# Intents -----------------------------------------------------------------------
+
+
+async def intent(
+    hass: HomeAssistant, clients: ClientFactory, name: str, action: str, **args: Any
+) -> tuple:
+    """Send an intent for the item called `name`; return the panel's answer."""
+    client = clients.last
+    key = items_by_name(last(client, "layout"))[name]["key"] if name != "?" else "zz"
+    client.respond.reset_mock()
+    message = {"t": "intent", "id": 5, "key": key, "action": action}
+    if args:
+        message["args"] = args
+    client.on_message(message)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    client.respond.assert_awaited_once()
+    return client.respond.await_args.args
+
+
+@pytest.mark.parametrize(
+    ("name", "action", "args", "service", "data"),
+    [
+        ("Ceiling", "toggle", {}, "light.toggle", {}),
+        ("Ceiling", "turn_off", {}, "light.turn_off", {}),
+        ("Ceiling", "turn_on", {}, "light.turn_on", {}),
+        ("Ceiling", "turn_on", {"brightness": 40}, "light.turn_on", {"brightness_pct": 40}),
+        (
+            "Ceiling",
+            "turn_on",
+            {"color_temp_k": 3000},
+            "light.turn_on",
+            {"color_temp_kelvin": 3000},
+        ),
+        ("Ceiling", "turn_on", {"hs": [400, 120]}, "light.turn_on", {"hs_color": [40, 100]}),
+        ("Ceiling", "turn_on", {"effect": "Candle"}, "light.turn_on", {"effect": "Candle"}),
+        ("Fan plug", "turn_on", {}, "switch.turn_on", {}),
+        ("Ceiling fan", "toggle", {}, "fan.toggle", {}),
+        ("Film night", "activate", {}, "scene.turn_on", {}),
+        ("Bedtime", "activate", {}, "script.turn_on", {}),
+        ("Radiator", "set_target", {"value": 21.5}, "climate.set_temperature", {"temperature": 21.5}),
+        ("Radiator", "set_hvac_mode", {"mode": "off"}, "climate.set_hvac_mode", {"hvac_mode": "off"}),
+        ("Radiator", "set_preset", {"preset": "comfort"}, "climate.set_preset_mode", {"preset_mode": "comfort"}),
+        ("Window blind", "open", {}, "cover.open_cover", {}),
+        ("Window blind", "stop", {}, "cover.stop_cover", {}),
+        ("Window blind", "set_position", {"position": 30}, "cover.set_cover_position", {"position": 30}),
+    ],
+)  # fmt: skip
+async def test_intents(
+    hass: HomeAssistant,
+    in_room: MockConfigEntry,
+    clients: ClientFactory,
+    name: str,
+    action: str,
+    args: dict[str, Any],
+    service: str,
+    data: dict[str, Any],
+) -> None:
+    domain, service_name = service.split(".")
+    calls = async_mock_service(hass, domain, service_name)
+    answer = await intent(hass, clients, name, action, **args)
+    assert answer == (5,)  # success: no error
+    assert len(calls) == 1
+    entity_id = next(e for e, (_, a) in ROOM.items() if name in a["friendly_name"])
+    assert calls[0].data == {"entity_id": [entity_id], **data}
+
+
+async def test_all_lights_go_one_way(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    turn_off = async_mock_service(hass, "light", "turn_off")
+    turn_on = async_mock_service(hass, "light", "turn_on")
+    await intent(hass, clients, "All lights", "toggle")  # the ceiling is on
+    assert turn_off[0].data["entity_id"] == ["light.ceiling", "light.lamp"]
+    hass.states.async_set("light.ceiling", "off", LIGHT_ATTRS)
+    await hass.async_block_till_done()
+    await intent(hass, clients, "All lights", "toggle")
+    assert turn_on[0].data["entity_id"] == ["light.ceiling", "light.lamp"]
+    await intent(hass, clients, "All lights", "turn_on", brightness=10)
+    assert turn_on[1].data == {
+        "entity_id": ["light.ceiling", "light.lamp"],
+        "brightness_pct": 10,
+    }
+
+
+@pytest.mark.parametrize(
+    ("name", "action", "args", "code"),
+    [
+        ("?", "toggle", {}, "unknown_key"),
+        ("Reading lamp", "turn_on", {"brightness": 40}, "unsupported"),
+        ("Ceiling", "turn_on", {"effect": "Disco"}, "unsupported"),
+        ("Ceiling", "turn_on", {"brightness": 40, "effect": "Candle"}, "bad_request"),
+        ("Ceiling", "turn_on", {"brightness": "lots"}, "bad_request"),
+        ("Ceiling", "turn_on", {"sparkle": 1}, "bad_request"),
+        ("Ceiling", "blink", {}, "unsupported"),
+        ("Fan plug", "activate", {}, "unsupported"),
+        ("Film night", "toggle", {}, "unsupported"),
+        ("Radiator", "set_range", {"low": 18, "high": 22}, "unsupported"),
+        ("Radiator", "set_hvac_mode", {"mode": "cool"}, "unsupported"),
+        ("Radiator", "set_fan_mode", {"fan_mode": "high"}, "unsupported"),
+        ("Radiator", "set_target", {"value": "warm"}, "bad_request"),
+        ("Window blind", "set_tilt", {"tilt": 10}, "unsupported"),
+        ("Window blind", "set_position", {"position": 140}, "bad_request"),
+    ],
+)
+async def test_intents_refused(
+    hass: HomeAssistant,
+    in_room: MockConfigEntry,
+    clients: ClientFactory,
+    name: str,
+    action: str,
+    args: dict[str, Any],
+    code: str,
+) -> None:
+    answer = await intent(hass, clients, name, action, **args)
+    assert answer[:2] == (5, code)
+
+
+async def test_intent_for_a_sensor(
+    hass: HomeAssistant, area, config_entry: MockConfigEntry, clients: ClientFactory
+) -> None:
+    config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        config_entry, options={CONF_MODE: MODE_MANUAL, CONF_ENTITIES: ["sensor.co2"]}
+    )
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    answer = await intent(hass, clients, "CO2", "toggle")
+    assert answer[:2] == (5, "unsupported")
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+async def test_intent_without_an_action(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    key = items_by_name(last(clients.last, "layout"))["Ceiling"]["key"]
+    clients.last.on_message({"t": "intent", "id": 5, "key": key})
+    await hass.async_block_till_done()
+    assert clients.last.respond.await_args.args[:2] == (5, "bad_request")
+
+
+async def test_intent_for_an_unavailable_entity(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    hass.states.async_set(
+        "switch.fan_plug", "unavailable", {"friendly_name": "Fan plug"}
+    )
+    await hass.async_block_till_done()
+    answer = await intent(hass, clients, "Fan plug", "toggle")
+    assert answer[:2] == (5, "unavailable")
+
+
+async def test_a_failing_service(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    async def fail(_call: ServiceCall) -> None:
+        raise HomeAssistantError("the bulb is on fire")
+
+    hass.services.async_register("switch", "toggle", fail)
+    answer = await intent(hass, clients, "Fan plug", "toggle")
+    assert answer == (5, "service_failed", "the bulb is on fire")
+
+
+async def test_a_missing_service(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    answer = await intent(hass, clients, "Fan plug", "toggle")
+    assert answer[:2] == (5, "service_failed")
+
+
+async def test_a_slow_service(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    release = asyncio.Event()
+
+    async def slow(_call: ServiceCall) -> None:
+        await release.wait()
+
+    hass.services.async_register("switch", "toggle", slow)
+    with patch.object(room, "INTENT_TIMEOUT", 0.01):
+        answer = await intent(hass, clients, "Fan plug", "toggle")
+    release.set()
+    assert answer == (5, "service_failed", "switch.toggle timed out")
+
+
+async def test_an_intent_before_any_layout(
+    hass: HomeAssistant, init_integration: MockConfigEntry, clients: ClientFactory
+) -> None:
+    init_integration.runtime_data.layout = None
+    clients.last.on_message({"t": "intent", "id": 5, "key": "e1", "action": "toggle"})
+    await hass.async_block_till_done()
+    assert clients.last.respond.await_args.args[:2] == (5, "unknown_key")
+
+
+async def test_an_answer_that_cant_be_sent(
+    hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
+) -> None:
+    async_mock_service(hass, "switch", "toggle")
+    clients.last.respond.side_effect = CannotConnect("closed")
+    key = items_by_name(last(clients.last, "layout"))["Fan plug"]["key"]
+    clients.last.on_message({"t": "intent", "id": 5, "key": key, "action": "toggle"})
+    await hass.async_block_till_done()
+    assert in_room.runtime_data.data.connected

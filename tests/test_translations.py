@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import re
 
+from custom_components.nesto.const import MODE_MANUAL, MODE_ROOM
+
 INTEGRATION = Path(__file__).resolve().parents[1] / "custom_components" / "nesto"
 EN = json.loads((INTEGRATION / "translations" / "en.json").read_text("utf-8"))
 # Home Assistant raises these itself, without the integration naming them.
@@ -43,5 +45,9 @@ def test_every_flow_error_and_abort_is_used():
 
 def test_every_flow_step_exists():
     sources = _sources()
-    for step in EN["config"]["step"]:
+    for step in [*EN["config"]["step"], *EN["options"]["step"]]:
         assert f"async_step_{step}" in sources, step
+
+
+def test_every_selector_option_has_a_label():
+    assert set(EN["selector"]["mode"]["options"]) == {MODE_ROOM, MODE_MANUAL}
