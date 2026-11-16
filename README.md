@@ -5,9 +5,9 @@
 [![Tests](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml/badge.svg)](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Work in progress.** A panel can be added and paired, shows and controls
-> a room, reports its sensors and presses, and its display and settings can
-> be changed from Home Assistant; notifications are still to come.
+> **Work in progress.** Everything planned for the first release is in:
+> pairing, the room, the display and settings, sensors, presses and
+> notifications. It hasn't been released yet.
 
 Turns a Nest Learning Thermostat (2nd generation), running the
 [Nesto firmware](https://github.com/jorgediez/nesto-firmware), into a room
@@ -26,7 +26,7 @@ Tested with: the simulator from nesto-firmware. Real thermostats follow.
 
 ## Features
 
-Planned for the first release:
+In the first release:
 
 - Discovery, and pairing with the code the panel shows.
 - Room mode (the panel's area, minus anything you exclude) or manual mode
@@ -130,6 +130,10 @@ entity's last known state again.
   says where: `ui` (on the controls, which it also worked), `standby` or
   `off`. A double press only comes in standby or off, and doesn't wake the
   panel, so it can trigger anything while the panel stays asleep.
+- **Notifications** (notify): `notify.send_message` shows a message on the
+  panel (see *Notifications*).
+- **Notification** (event): what happened to a notification (see
+  *Notifications*).
 - **Identify** (button, under configuration): the panel wakes, pulses its
   backlight and beeps three times, so you can tell which one it is.
 - Under diagnostic: **Battery voltage**, **Last restart** and **Base
@@ -186,6 +190,69 @@ brackets), so a panel nobody has configured behaves as it always has.
 | Press click | A click on pressing the screen (off). |
 | Notification sounds | Notifications may beep (on). |
 | Temperature offset | Added to the temperature reading, −10 to +10 °C (0). The head unit warms itself, so its reading runs high: set this to the difference from a thermometer next to it. Home Assistant's own, never sent to the panel; only on a panel with a temperature sensor. |
+
+## Notifications
+
+`notify.send_message` on the panel's *Notifications* entity shows a normal
+notification: it pops up for 15 seconds with a short beep, then waits in the
+list on the panel's home screen.
+
+The `nesto.notify` action does more:
+
+| Field | |
+|---|---|
+| `config_entry_id` | The panel. |
+| `message` | Required, up to 256 characters. |
+| `title` | Up to 64 characters. |
+| `id` | Sending again with the same ID replaces that notification. Home Assistant makes one up if you leave it out, and returns it. |
+| `priority` | `low` (a badge on the home screen, no pop-up), `normal` (pops up, wakes the panel from standby), `high` (also wakes it when the screen is off) or `critical` (stays until answered, and beeps every 30 seconds). Default `normal`. |
+| `duration` | Seconds on screen before it goes to the list; 0 means until dismissed. Default 15. |
+| `beep` | `none`, `short` or `alert`. Default `short`. Silent when *Notification sounds* is off, except for critical ones. |
+| `icon` | Shown as the closest of the panel's built-in icons (a door, a bell, a light…), or left out. |
+| `buttons` | Up to 3 labels. The ring chooses among them and *Dismiss*, and a press answers. A button's ID is its label in lower case, with `_` for spaces: *Open* is `open`. |
+
+`nesto.clear_notification` removes one notification by its `id`, or all of
+them.
+
+The *Notification* event entity says what happened to each one: `shown`,
+`dismissed`, `expired` (its time on screen ran out unanswered; it stays in the
+list) or `action`. Each event has the notification's `id`, and an `action`
+also has the `button`. For example, a doorbell that offers to light the porch:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.doorbell
+    to: "on"
+actions:
+  - action: nesto.notify
+    data:
+      config_entry_id: 01JXXXXXXXXXXXXXXXXXXXXXXX  # the panel's entry
+      id: doorbell
+      title: Front door
+      message: Someone is at the door. Light the porch?
+      priority: high
+      beep: alert
+      icon: mdi:door
+      buttons: [Light, Ignore]
+  - wait_for_trigger:
+      - trigger: state
+        entity_id: event.nesto_panel_0a1b2c_notification
+    timeout: "00:01:00"
+  - if:
+      - condition: template
+        value_template: >-
+          {{ wait.trigger is not none
+             and wait.trigger.to_state.attributes.id == 'doorbell'
+             and wait.trigger.to_state.attributes.button == 'light' }}
+    then:
+      - action: light.turn_on
+        target:
+          entity_id: light.porch
+```
+
+The panel keeps the 10 most recent notifications in memory: a panel that
+restarts has none, and Home Assistant doesn't send them again.
 
 ## Troubleshooting
 

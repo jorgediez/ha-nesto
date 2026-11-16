@@ -420,19 +420,26 @@ def cover_features(attributes: Mapping[str, Any]) -> dict[str, bool]:
     }
 
 
+def builtin_icon(icon: object) -> str | None:
+    """Return the built-in icon (appendix C) closest to a Material Design one."""
+    if not isinstance(icon, str) or not icon.startswith("mdi:"):
+        return None
+    name = icon.removeprefix("mdi:")
+    if name in ICONS:
+        return name
+    for alias, builtin in ICON_ALIASES.items():
+        if name == alias or name.startswith(f"{alias}-"):
+            return builtin
+    for builtin in ICON_PREFIXES:
+        if name.startswith(f"{builtin}-"):
+            return builtin
+    return None
+
+
 def icon_for(state: State) -> str | None:
     """Return the closest built-in icon (appendix C), or None for the default."""
-    icon = state.attributes.get(ATTR_ICON)
-    if isinstance(icon, str) and icon.startswith("mdi:"):
-        name = icon.removeprefix("mdi:")
-        if name in ICONS:
-            return name
-        for alias, builtin in ICON_ALIASES.items():
-            if name == alias or name.startswith(f"{alias}-"):
-                return builtin
-        for builtin in ICON_PREFIXES:
-            if name.startswith(f"{builtin}-"):
-                return builtin
+    if icon := builtin_icon(state.attributes.get(ATTR_ICON)):
+        return icon
     device_class = state.attributes.get(ATTR_DEVICE_CLASS)
     return DEVICE_CLASS_ICONS.get((state.domain, device_class)) or DOMAIN_ICONS.get(
         state.domain

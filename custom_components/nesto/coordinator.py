@@ -42,6 +42,7 @@ from .client import (
     UnsupportedProtocol,
 )
 from .const import CONF_KEY, CONF_PANEL_ID, DOMAIN, RECONNECT_DELAYS
+from .notifications import EVENTS as NOTIFICATION_EVENTS
 from .room import (
     IntentError,
     Keys,
@@ -93,6 +94,11 @@ RESTART_TOLERANCE = timedelta(minutes=1)
 def signal_input(entry_id: str) -> str:
     """Return the dispatcher signal for a panel's press gestures."""
     return f"{DOMAIN}_{entry_id}_input"
+
+
+def signal_notification(entry_id: str) -> str:
+    """Return the dispatcher signal for what happens to notifications."""
+    return f"{DOMAIN}_{entry_id}_notification"
 
 
 @dataclass(frozen=True)
@@ -261,6 +267,45 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         async_dispatcher_send(
             self.hass, signal_input(self.config_entry.entry_id), gesture, context
         )
+
+    @callback
+    def _notify_event(self, message: dict[str, Any]) -> None:
+        """Pass on what happened to a notification, once ready (section 14)."""
+        event, nid, action = (
+            message.get("event"),
+            message.get("nid"),
+            message.get("action"),
+        )
+        if (
+            not self.data.ready
+            or event not in NOTIFICATION_EVENTS
+            or not isinstance(nid, str)
+            or (event == "action") != isinstance(action, str)
+        ):
+            return
+        async_dispatcher_send(
+            self.hass,
+            signal_notification(self.config_entry.entry_id),
+            event,
+            nid,
+            action,
+        )
+
+    async def async_notify(self, request: dict[str, Any]) -> None:
+        """Show a notification on the panel, or raise why not."""
+        await self.async_request(request)
+
+    async def async_clear_notifications(self, nid: str | None) -> None:
+        """Remove one notification, or all of them."""
+        message: dict[str, Any] = {"t": "notify_clear"}
+        if nid is None:
+            message["all"] = True
+        else:
+            message["nid"] = nid
+        try:
+            await self._async_send(message)
+        except NestoError as err:
+            raise self._cannot_send(err) from err
 
     async def _async_refresh_status(self, _now: datetime | None = None) -> None:
         """Ask the panel how it stands, for the status entities."""
@@ -518,14 +563,17 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
                 raise CannotConnect("not connected")
             return await self.client.request(message, seconds)
         except NestoError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="cannot_send",
-                translation_placeholders={
-                    "name": self.config_entry.title,
-                    "error": str(err),
-                },
-            ) from err
+            raise self._cannot_send(err) from err
+
+    def _cannot_send(self, err: NestoError) -> HomeAssistantError:
+        return HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="cannot_send",
+            translation_placeholders={
+                "name": self.config_entry.title,
+                "error": str(err),
+            },
+        )
 
     @callback
     def _on_message(self, message: dict[str, Any]) -> None:
@@ -550,6 +598,8 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
             self._sensors(message)
         elif kind == "input":
             self._input(message)
+        elif kind == "notify_event":
+            self._notify_event(message)
         else:
             _LOGGER.debug("Panel %s sent %s", self.config_entry.title, kind)
 

@@ -4,8 +4,10 @@
 rules:
   # Bronze
   action-setup:
-    status: todo
-    comment: The notification actions arrive with notifications.
+    status: done
+    comment: >-
+      nesto.notify and nesto.clear_notification, registered in async_setup;
+      they name the panel by its config entry.
   appropriate-polling:
     status: done
     comment: >-
@@ -28,7 +30,7 @@ rules:
     comment: >-
       No requirements: the protocol client is part of the integration, and its
       one library, cryptography, comes with Home Assistant core.
-  docs-actions: todo
+  docs-actions: done
   docs-conditions:
     status: exempt
     comment: The integration provides no conditions.
