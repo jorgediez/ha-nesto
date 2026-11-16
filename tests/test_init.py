@@ -68,8 +68,25 @@ async def test_setup_writes_nothing_but_the_synchronisation(
 ) -> None:
     """Never write to the panel unasked: the settings are the panel's defaults."""
     config = next(m for m in clients.last.sent if m["t"] == "config")
-    # An empty config: every setting takes the firmware's default (section 12).
-    assert config == {"t": "config"}
+    # The firmware's own defaults (src/room/DisplayPower.hpp), so a panel
+    # nobody configured carries on as it was (section 12).
+    assert config == {
+        "t": "config",
+        "display": {
+            "brightness": 80,
+            "auto_brightness": True,
+            "timeout_s": 30,
+            "wake_on_motion": True,
+            "wake_on_input_when_off": True,
+        },
+        "standby": {
+            "mode": "clock",
+            "brightness": 20,
+            "clock": {"style": "analog", "seconds": False, "date": True},
+        },
+        "locale": {"hour12": False},
+        "sound": {"ring_click": True, "press_click": False, "notifications": True},
+    }
     clients.last.request.assert_not_awaited()
 
 

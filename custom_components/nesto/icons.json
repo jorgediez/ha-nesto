@@ -1,0 +1,60 @@
+{
+  "entity": {
+    "light": {
+      "display": {
+        "default": "mdi:tablet"
+      }
+    },
+    "number": {
+      "display_brightness": {
+        "default": "mdi:brightness-6"
+      },
+      "standby_brightness": {
+        "default": "mdi:brightness-4"
+      },
+      "display_timeout_s": {
+        "default": "mdi:timer-outline"
+      }
+    },
+    "select": {
+      "standby_mode": {
+        "default": "mdi:sleep"
+      },
+      "standby_clock_style": {
+        "default": "mdi:clock-outline"
+      }
+    },
+    "switch": {
+      "display_auto_brightness": {
+        "default": "mdi:brightness-auto"
+      },
+      "display_wake_on_motion": {
+        "default": "mdi:motion-sensor"
+      },
+      "display_wake_on_input_when_off": {
+        "default": "mdi:gesture-tap"
+      },
+      "standby_clock_seconds": {
+        "default": "mdi:timer-sand"
+      },
+      "standby_clock_date": {
+        "default": "mdi:calendar"
+      },
+      "locale_hour12": {
+        "default": "mdi:hours-12"
+      },
+      "sound_ring_click": {
+        "default": "mdi:rotate-right"
+      },
+      "sound_press_click": {
+        "default": "mdi:gesture-tap-button"
+      },
+      "sound_notifications": {
+        "default": "mdi:bell-ring-outline",
+        "state": {
+          "off": "mdi:bell-off-outline"
+        }
+      }
+    }
+  }
+}

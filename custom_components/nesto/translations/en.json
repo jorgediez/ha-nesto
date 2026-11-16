@@ -111,6 +111,69 @@
       }
     }
   },
+  "entity": {
+    "light": {
+      "display": {
+        "name": "Display"
+      }
+    },
+    "number": {
+      "display_brightness": {
+        "name": "Brightness"
+      },
+      "standby_brightness": {
+        "name": "Standby brightness"
+      },
+      "display_timeout_s": {
+        "name": "Screen timeout"
+      }
+    },
+    "select": {
+      "standby_mode": {
+        "name": "Standby screen",
+        "state": {
+          "clock": "Clock",
+          "off": "Screen off"
+        }
+      },
+      "standby_clock_style": {
+        "name": "Clock style",
+        "state": {
+          "analog": "Analog",
+          "digital": "Digital"
+        }
+      }
+    },
+    "switch": {
+      "display_auto_brightness": {
+        "name": "Auto brightness"
+      },
+      "display_wake_on_motion": {
+        "name": "Wake on motion"
+      },
+      "display_wake_on_input_when_off": {
+        "name": "Wake from off by touch"
+      },
+      "standby_clock_seconds": {
+        "name": "Clock seconds"
+      },
+      "standby_clock_date": {
+        "name": "Clock date"
+      },
+      "locale_hour12": {
+        "name": "12-hour clock"
+      },
+      "sound_ring_click": {
+        "name": "Ring click"
+      },
+      "sound_press_click": {
+        "name": "Press click"
+      },
+      "sound_notifications": {
+        "name": "Notification sounds"
+      }
+    }
+  },
   "exceptions": {
     "auth_failed": {
       "message": "{name} at {host} doesn't accept the pairing key."
