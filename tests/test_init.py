@@ -19,6 +19,7 @@ from custom_components.nesto.client import (
 )
 from custom_components.nesto.const import DOMAIN
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
+from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.util import dt as dt_util
@@ -46,12 +47,18 @@ async def test_setup_synchronises(
     assert init_integration.state is ConfigEntryState.LOADED
     client = clients.last
     client.authenticate.assert_awaited_once_with(KEY)
-    # Section 8's order: time, config, layout, states.
-    assert sent_types(client) == ["time", "config", "layout", "states"]
-    time, _config, layout, states = client.sent
+    # Section 8's order: time, config (and ha_info), layout, states.
+    assert sent_types(client) == ["time", "config", "ha_info", "layout", "states"]
+    time, _config, ha_info, layout, states = client.sent
     assert time["tz"] == hass.config.time_zone
     assert isinstance(time["utc_ms"], int)
     assert isinstance(time["utc_offset_min"], int)
+    # The versions the panel's Technical info shows.
+    assert ha_info == {
+        "t": "ha_info",
+        "ha_version": HA_VERSION,
+        "integration_version": "0.1.0",
+    }
     assert layout["title"] == TITLE
     assert layout["items"] == []
     assert states == {"t": "states", "full": True, "items": {}}
@@ -206,10 +213,10 @@ async def test_reconnects_after_a_drop(
     await coordinator._reconnect_task
     assert coordinator.data.connected
     assert "is back" in caplog.text
-    assert sent_types(clients.last) == ["time", "config", "layout", "states"]
+    assert sent_types(clients.last) == ["time", "config", "ha_info", "layout", "states"]
     # A new layout revision, so the panel takes it as the latest (section 9).
-    first_rev = clients.clients[0].sent[2]["rev"]
-    assert clients.last.sent[2]["rev"] > first_rev
+    first_rev = clients.clients[0].sent[3]["rev"]
+    assert clients.last.sent[3]["rev"] > first_rev
     # The firmware was updated meanwhile.
     [device] = dr.async_entries_for_config_entry(
         dr.async_get(hass), init_integration.entry_id
