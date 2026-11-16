@@ -138,8 +138,12 @@ entity's last known state again.
   backlight and beeps three times, so you can tell which one it is.
 - Under diagnostic: **Battery voltage**, **Last restart** and **Base
   connected**; and, disabled until you enable them, **Supply voltage**, **USB
-  voltage**, **Free memory**, **IP address** and **Base firmware**. Home
-  Assistant asks the panel for these every five minutes.
+  voltage**, **Free memory**, **Wi-Fi signal** (dBm), **IP address** and
+  **Base firmware**. Home Assistant asks the panel for these every five
+  minutes.
+
+When it connects, Home Assistant also tells the panel its own version and
+this integration's, which the panel shows in Settings → Technical info.
 
 The sensors exist only for a panel on its base: a head unit off its base has
 none, and when it's put back, its entry reloads and they appear. Everything

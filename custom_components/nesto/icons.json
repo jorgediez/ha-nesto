@@ -67,6 +67,9 @@
       "free_memory": {
         "default": "mdi:memory"
       },
+      "wifi_signal": {
+        "default": "mdi:wifi"
+      },
       "ip_address": {
         "default": "mdi:ip-network"
       },

@@ -15,7 +15,7 @@ import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT, __version__ as HA_VERSION
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import (
@@ -31,6 +31,7 @@ from homeassistant.helpers.event import (
     async_track_utc_time_change,
 )
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
 from .client import (
@@ -115,6 +116,7 @@ class PanelStatus:
 
     last_restart: datetime | None = None
     free_ram_kb: int | None = None
+    wifi_rssi: int | None = None  # dBm; None without Wi-Fi
     ip: str | None = None
     base_connected: bool | None = None
     base_fw: str | None = None
@@ -225,6 +227,15 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         """Send what the panel shows, in the order section 8 asks for."""
         await self.async_send_time()
         await self._async_send(self.settings.as_config())
+        # For the panel's Technical info; not needed for `ready` (section 18).
+        integration = await async_get_integration(self.hass, DOMAIN)
+        await self._async_send(
+            {
+                "t": "ha_info",
+                "ha_version": HA_VERSION,
+                "integration_version": str(integration.version or ""),
+            }
+        )
         async with self._send_lock:
             await self._async_send_room(self.build_layout())
 
@@ -349,6 +360,7 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         return PanelStatus(
             last_restart=restart,
             free_ram_kb=typed("free_ram_kb", int),
+            wifi_rssi=typed("wifi_rssi", int),
             ip=typed("ip", str),
             base_connected=typed("base_connected", bool),
             base_fw=typed("base_fw", str),

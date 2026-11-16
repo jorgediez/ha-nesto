@@ -62,7 +62,7 @@ INFO = {
     "ok": True,
     "uptime_s": 3600,
     "free_ram_kb": 61234,
-    "wifi_rssi": None,
+    "wifi_rssi": -51,
     "ip": "192.168.1.60",
     "fw": "0.1.0",
     "base_connected": True,
@@ -142,6 +142,7 @@ async def test_a_panel_off_its_base_has_no_sensors(
     assert keys(hass, init_integration, SENSOR_DOMAIN) == {
         "last_restart",
         "free_memory",
+        "wifi_signal",
         "ip_address",
         "base_firmware",
     }
@@ -162,6 +163,7 @@ async def test_a_panel_on_its_base(
         "usb_voltage",
         "last_restart",
         "free_memory",
+        "wifi_signal",
         "ip_address",
         "base_firmware",
     }
@@ -181,6 +183,7 @@ async def test_a_panel_on_its_base(
         ("supply_voltage", True),
         ("usb_voltage", True),
         ("free_memory", True),
+        ("wifi_signal", True),
         ("ip_address", True),
         ("base_firmware", True),
         ("last_restart", False),
@@ -375,6 +378,7 @@ async def test_status_when_ready(
     assert state(BINARY_SENSOR_DOMAIN, "base_connected") == STATE_ON
     status = init_integration.runtime_data.data.status
     assert status.free_ram_kb == 61234
+    assert status.wifi_rssi == -51
     assert status.ip == "192.168.1.60"
     assert status.base_fw == "1.2.3"
 
@@ -427,12 +431,20 @@ async def test_status_with_odd_fields(
 ) -> None:
     answer_info(
         clients,
-        {"t": "result", "ok": True, "uptime_s": True, "free_ram_kb": "lots", "ip": 7},
+        {
+            "t": "result",
+            "ok": True,
+            "uptime_s": True,
+            "free_ram_kb": "lots",
+            "wifi_rssi": -51.5,
+            "ip": 7,
+        },
     )
     await send(hass, clients, {"t": "ready"})
     status = init_integration.runtime_data.data.status
     assert status.last_restart is None
     assert status.free_ram_kb is None
+    assert status.wifi_rssi is None
     assert status.ip is None
     assert status.base_connected is None
 
