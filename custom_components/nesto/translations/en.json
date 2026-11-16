@@ -112,6 +112,31 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "motion": {
+        "name": "Motion"
+      },
+      "proximity": {
+        "name": "Proximity"
+      },
+      "base_connected": {
+        "name": "Base connected"
+      }
+    },
+    "event": {
+      "press": {
+        "name": "Press",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "single_press": "Single press",
+              "double_press": "Double press",
+              "long_press": "Long press"
+            }
+          }
+        }
+      }
+    },
     "light": {
       "display": {
         "name": "Display"
@@ -126,6 +151,9 @@
       },
       "display_timeout_s": {
         "name": "Screen timeout"
+      },
+      "local_temperature_offset": {
+        "name": "Temperature offset"
       }
     },
     "select": {
@@ -142,6 +170,38 @@
           "analog": "Analog",
           "digital": "Digital"
         }
+      }
+    },
+    "sensor": {
+      "temperature": {
+        "name": "Temperature"
+      },
+      "humidity": {
+        "name": "Humidity"
+      },
+      "illuminance": {
+        "name": "Light level"
+      },
+      "battery_voltage": {
+        "name": "Battery voltage"
+      },
+      "supply_voltage": {
+        "name": "Supply voltage"
+      },
+      "usb_voltage": {
+        "name": "USB voltage"
+      },
+      "last_restart": {
+        "name": "Last restart"
+      },
+      "free_memory": {
+        "name": "Free memory"
+      },
+      "ip_address": {
+        "name": "IP address"
+      },
+      "base_firmware": {
+        "name": "Base firmware"
       }
     },
     "switch": {

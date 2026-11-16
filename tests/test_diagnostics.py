@@ -42,6 +42,8 @@ async def test_diagnostics(
         "last_error": "CannotConnect: refused",
     }
     assert result["display"] is None
+    assert result["status"] is None
+    assert result["sensors"] == []
     assert result["settings"]["display"]["brightness"] == 80
     assert "t" not in result["settings"]
     assert result["room"] == {
@@ -66,3 +68,35 @@ async def test_diagnostics_with_the_display(
     )
     result = await get_diagnostics_for_config_entry(hass, hass_client, init_integration)
     assert result["display"] == {"state": "standby", "brightness": 20}
+
+
+async def test_diagnostics_with_status_and_sensors(
+    hass: HomeAssistant,
+    hass_client: ClientSessionGenerator,
+    init_integration: MockConfigEntry,
+    clients: ClientFactory,
+) -> None:
+    """The status is there, but not the panel's address."""
+
+    async def request(message, _seconds=None):
+        return {
+            "t": "result",
+            "ok": True,
+            "uptime_s": 60,
+            "free_ram_kb": 1000,
+            "ip": "192.168.1.61",
+            "base_connected": True,
+            "base_fw": "1.2.3",
+        }
+
+    clients.last.request.side_effect = request
+    clients.last.on_message({"t": "sensors", "temperature_c": 21.0})
+    clients.last.on_message({"t": "ready"})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    result = await get_diagnostics_for_config_entry(hass, hass_client, init_integration)
+    assert "192.168.1.61" not in json.dumps(result)
+    assert result["status"]["free_ram_kb"] == 1000
+    assert result["status"]["base_connected"] is True
+    assert "ip" not in result["status"]
+    assert result["sensors"] == ["temperature_c"]
+    assert result["temperature_offset"] == 0.0
