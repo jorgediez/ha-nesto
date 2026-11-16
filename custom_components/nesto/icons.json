@@ -14,11 +14,19 @@
     "event": {
       "press": {
         "default": "mdi:gesture-tap"
+      },
+      "notification": {
+        "default": "mdi:message-badge-outline"
       }
     },
     "light": {
       "display": {
         "default": "mdi:tablet"
+      }
+    },
+    "notify": {
+      "notifications": {
+        "default": "mdi:message-text-outline"
       }
     },
     "number": {
@@ -97,6 +105,14 @@
           "off": "mdi:bell-off-outline"
         }
       }
+    }
+  },
+  "services": {
+    "notify": {
+      "service": "mdi:message-badge-outline"
+    },
+    "clear_notification": {
+      "service": "mdi:message-off-outline"
     }
   }
 }

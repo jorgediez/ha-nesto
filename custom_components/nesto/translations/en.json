@@ -109,6 +109,21 @@
         "room": "The panel's room",
         "manual": "Entities I pick"
       }
+    },
+    "priority": {
+      "options": {
+        "low": "Low: a badge on the home screen, no pop-up",
+        "normal": "Normal: pops up, wakes the panel from standby",
+        "high": "High: also wakes the panel when its screen is off",
+        "critical": "Critical: stays until answered, beeps every 30 seconds"
+      }
+    },
+    "beep": {
+      "options": {
+        "none": "None",
+        "short": "Short",
+        "alert": "Alert"
+      }
     }
   },
   "entity": {
@@ -135,11 +150,29 @@
             }
           }
         }
+      },
+      "notification": {
+        "name": "Notification",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "shown": "Shown",
+              "dismissed": "Dismissed",
+              "expired": "Expired",
+              "action": "Button pressed"
+            }
+          }
+        }
       }
     },
     "light": {
       "display": {
         "name": "Display"
+      }
+    },
+    "notify": {
+      "notifications": {
+        "name": "Notifications"
       }
     },
     "number": {
@@ -238,11 +271,29 @@
     "auth_failed": {
       "message": "{name} at {host} doesn't accept the pairing key."
     },
+    "bad_button": {
+      "message": "The button \"{label}\" needs a label with letters or digits, different from the others."
+    },
     "cannot_connect": {
       "message": "Can't reach {name} at {host}: {error}"
     },
     "cannot_send": {
       "message": "Couldn't send to {name}: {error}"
+    },
+    "empty_message": {
+      "message": "The message is empty."
+    },
+    "panel_not_loaded": {
+      "message": "{name} isn't set up; check its entry."
+    },
+    "too_long": {
+      "message": "The {field} is too long: the panel takes {limit} characters at most."
+    },
+    "too_many_buttons": {
+      "message": "Too many buttons: the panel shows {limit} at most."
+    },
+    "unknown_panel": {
+      "message": "There's no Nesto Panel with entry {entry_id}."
     },
     "unsupported_protocol": {
       "message": "{name} at {host} speaks protocol version {version}, which this integration doesn't."
@@ -252,6 +303,64 @@
     "unsupported_protocol": {
       "title": "{name} needs an update",
       "description": "{name} speaks version {version} of the Nesto Panel protocol, which this version of the integration doesn't. Update the integration, or the panel's firmware, so both speak the same version. Home Assistant will connect again once you reload the panel's entry."
+    }
+  },
+  "services": {
+    "notify": {
+      "name": "Show a notification",
+      "description": "Shows a notification on a Nesto Panel, with buttons if you like. Returns its ID.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Panel",
+          "description": "The panel to show it on."
+        },
+        "message": {
+          "name": "Message",
+          "description": "Up to 256 characters."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Up to 64 characters."
+        },
+        "id": {
+          "name": "ID",
+          "description": "Sending again with the same ID replaces that notification. Home Assistant makes one up if you leave it out."
+        },
+        "priority": {
+          "name": "Priority",
+          "description": "How much it interrupts."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Seconds it stays on screen before going to the list; 0 means until dismissed."
+        },
+        "beep": {
+          "name": "Beep",
+          "description": "The sound when it arrives. Silent when the panel's notification sounds are off, except for critical ones."
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "Shown with it, as the closest of the panel's built-in icons; left out if none is close."
+        },
+        "buttons": {
+          "name": "Buttons",
+          "description": "Up to 3 labels. A press sends the label's ID (\"Open\" sends open) in the Notification event."
+        }
+      }
+    },
+    "clear_notification": {
+      "name": "Clear notifications",
+      "description": "Removes a notification from a Nesto Panel, or all of them.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Panel",
+          "description": "The panel to clear."
+        },
+        "id": {
+          "name": "ID",
+          "description": "The notification to remove; leave it out to remove them all."
+        }
+      }
     }
   }
 }

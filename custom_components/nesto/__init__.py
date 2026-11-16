@@ -13,10 +13,13 @@ from homeassistant.exceptions import (
     ConfigEntryError,
     ConfigEntryNotReady,
 )
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.typing import ConfigType
 
 from .client import AuthenticationFailed, NestoClient, NestoError, UnsupportedProtocol
 from .const import CONF_KEY, DOMAIN, UNPAIR_TIMEOUT
 from .coordinator import NestoConfigEntry, NestoCoordinator
+from .services import async_setup_services
 from .settings import Settings
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,11 +29,20 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
     Platform.EVENT,
     Platform.LIGHT,
+    Platform.NOTIFY,
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,
     Platform.SWITCH,
 ]
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the actions, which name the panel by its entry."""
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: NestoConfigEntry) -> bool:

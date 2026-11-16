@@ -1,0 +1,68 @@
+notify:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: nesto
+    message:
+      required: true
+      example: Someone is at the door
+      selector:
+        text:
+          multiline: true
+    title:
+      example: Front door
+      selector:
+        text:
+    id:
+      example: front-door
+      selector:
+        text:
+    priority:
+      default: normal
+      selector:
+        select:
+          translation_key: priority
+          options:
+            - low
+            - normal
+            - high
+            - critical
+    duration:
+      default: 15
+      selector:
+        number:
+          min: 0
+          max: 86400
+          unit_of_measurement: s
+          mode: box
+    beep:
+      default: short
+      selector:
+        select:
+          translation_key: beep
+          options:
+            - none
+            - short
+            - alert
+    icon:
+      selector:
+        icon:
+    buttons:
+      example: '["Open", "Ignore"]'
+      selector:
+        text:
+          multiple: true
+
+clear_notification:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: nesto
+    id:
+      example: front-door
+      selector:
+        text:
