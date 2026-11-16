@@ -721,6 +721,8 @@ async def test_a_failing_service(
 async def test_a_missing_service(
     hass: HomeAssistant, in_room: MockConfigEntry, clients: ClientFactory
 ) -> None:
+    # The panel's own switches load the switch integration; take its toggle away.
+    hass.services.async_remove("switch", "toggle")
     answer = await intent(hass, clients, "Fan plug", "toggle")
     assert answer[:2] == (5, "service_failed")
 

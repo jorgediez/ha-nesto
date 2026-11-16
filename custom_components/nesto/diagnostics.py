@@ -2,7 +2,8 @@
 
 They say how the panel and its connection stand: the firmware, model,
 protocol and capabilities the panel announced, whether it's connected, the
-last error, and how many items of each kind it shows. Left out: the pairing
+last error, how many items of each kind it shows, the display's state and
+the panel's settings. Left out: the pairing
 key, which works like a password; the panel's address and id (its Wi-Fi MAC
 address), which identify the device and the network; and which entities and
 areas the panel shows, which describe the home.
@@ -11,6 +12,7 @@ areas the panel shows, which describe the home.
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import asdict
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
@@ -43,6 +45,9 @@ async def async_get_config_entry_diagnostics(
     error = coordinator.last_error
     layout = coordinator.layout
     options = entry.options
+    display = coordinator.data.display
+    settings = coordinator.settings.as_config()
+    del settings["t"]
     return {
         "entry": {
             "version": entry.version,
@@ -58,6 +63,8 @@ async def async_get_config_entry_diagnostics(
             "ready": coordinator.data.ready,
             "last_error": f"{type(error).__name__}: {error}" if error else None,
         },
+        "display": asdict(display) if display is not None else None,
+        "settings": settings,
         "room": {
             "mode": options.get(CONF_MODE, MODE_ROOM),
             "excluded": len(options.get(CONF_EXCLUDE, [])),

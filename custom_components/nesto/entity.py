@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from homeassistant.const import EntityCategory
 from homeassistant.helpers.device_registry import (
     CONNECTION_NETWORK_MAC,
     DeviceInfo,
@@ -11,6 +14,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, MANUFACTURER, MODELS
 from .coordinator import NestoCoordinator
+from .settings import Path
 
 
 class NestoEntity(CoordinatorEntity[NestoCoordinator]):
@@ -46,3 +50,34 @@ class NestoEntity(CoordinatorEntity[NestoCoordinator]):
     def available(self) -> bool:
         """Return whether the panel is connected."""
         return super().available and self.coordinator.data.connected
+
+
+class NestoSettingEntity(NestoEntity):
+    """One of the panel's settings, which Home Assistant keeps.
+
+    It stays available while the panel is away: a change is saved, and the
+    panel gets it when it connects again.
+    """
+
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: NestoCoordinator, path: Path) -> None:
+        """Initialise; the setting's path is also its key and translation key."""
+        key = "_".join(path)
+        super().__init__(coordinator, key)
+        self._attr_translation_key = key
+        self._path = path
+
+    @property
+    def available(self) -> bool:
+        """Return True: the setting is Home Assistant's, panel or not."""
+        return True
+
+    @property
+    def setting(self) -> Any:
+        """Return the setting's value."""
+        return self.coordinator.settings.get(self._path)
+
+    async def async_set(self, value: Any) -> None:
+        """Change the setting."""
+        await self.coordinator.async_set_setting(self._path, value)

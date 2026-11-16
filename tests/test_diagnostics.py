@@ -13,7 +13,7 @@ from pytest_homeassistant.typing import ClientSessionGenerator
 from custom_components.nesto.client import CannotConnect
 from homeassistant.core import HomeAssistant
 
-from .common import HOST, KEY, PANEL_ID
+from .common import HOST, KEY, PANEL_ID, ClientFactory
 
 
 async def test_diagnostics(
@@ -41,6 +41,9 @@ async def test_diagnostics(
         "ready": False,
         "last_error": "CannotConnect: refused",
     }
+    assert result["display"] is None
+    assert result["settings"]["display"]["brightness"] == 80
+    assert "t" not in result["settings"]
     assert result["room"] == {
         "mode": "room",
         "excluded": 0,
@@ -50,3 +53,16 @@ async def test_diagnostics(
         "waiting_for_state": 0,
         "left_out": 0,
     }
+
+
+async def test_diagnostics_with_the_display(
+    hass: HomeAssistant,
+    hass_client: ClientSessionGenerator,
+    init_integration: MockConfigEntry,
+    clients: ClientFactory,
+) -> None:
+    clients.last.on_message(
+        {"t": "display_state", "state": "standby", "brightness": 20, "cause": "sync"}
+    )
+    result = await get_diagnostics_for_config_entry(hass, hass_client, init_integration)
+    assert result["display"] == {"state": "standby", "brightness": 20}

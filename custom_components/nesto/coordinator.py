@@ -8,7 +8,7 @@ on what the panel sends, and connects again when the connection drops.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 import logging
 import time
@@ -49,6 +49,7 @@ from .room import (
     diff,
     item_state,
 )
+from .settings import Path, Settings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,6 +64,18 @@ class WrongPanel(CannotConnect):
     """Another panel answers at the address: the panel's address changed."""
 
 
+# The display's states (section 13).
+DISPLAY_STATES = ("active", "standby", "off")
+
+
+@dataclass(frozen=True)
+class DisplayState:
+    """Where the panel's display stands, as it last reported."""
+
+    state: str  # one of DISPLAY_STATES
+    brightness: int  # 0 to 100, as the screen shows it now
+
+
 @dataclass(frozen=True)
 class PanelData:
     """What the coordinator knows about its panel."""
@@ -70,6 +83,8 @@ class PanelData:
     connected: bool = False
     # The panel has its time, settings, layout and states (section 8).
     ready: bool = False
+    # None until the panel reports it, right after synchronising.
+    display: DisplayState | None = None
 
 
 class NestoCoordinator(DataUpdateCoordinator[PanelData]):
@@ -104,6 +119,7 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         self._tracked: frozenset[str] = frozenset()
         self._untrack_states: CALLBACK_TYPE | None = None
         self._left_out: tuple[str, ...] = ()
+        self.settings = Settings(hass, entry.entry_id)
 
     @property
     def panel_id(self) -> str:
@@ -157,11 +173,42 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
     async def _async_synchronise(self) -> None:
         """Send what the panel shows, in the order section 8 asks for."""
         await self.async_send_time()
-        # Every setting left out takes the panel's own default; the settings
-        # entities fill this in later.
-        await self._async_send({"t": "config"})
+        await self._async_send(self.settings.as_config())
         async with self._send_lock:
             await self._async_send_room(self.build_layout())
+
+    # Settings and the display --------------------------------------------------
+
+    async def async_set_setting(self, path: Path, value: Any) -> None:
+        """Change a setting, save it, and send the panel its settings.
+
+        A panel that isn't connected gets them when it connects again.
+        """
+        if not self.settings.set(path, value):
+            return
+        self.async_update_listeners()
+        if not self.connected:
+            return
+        try:
+            await self._async_send(self.settings.as_config())
+        except NestoError as err:
+            # A broken connection reports itself through on_close, and the
+            # settings go with the next synchronisation.
+            _LOGGER.debug("Couldn't send the settings: %s", err)
+
+    async def async_set_display(self, state: str) -> None:
+        """Turn the display active, to standby or off (section 13)."""
+        await self.async_request({"t": "display", "state": state})
+
+    @callback
+    def _display_state(self, message: dict[str, Any]) -> None:
+        state, brightness = message.get("state"), message.get("brightness")
+        if state not in DISPLAY_STATES or not isinstance(brightness, int):
+            _LOGGER.debug("Panel %s sent a bad display_state", self.config_entry.title)
+            return
+        self.async_set_updated_data(
+            replace(self.data, display=DisplayState(state, brightness))
+        )
 
     # The room --------------------------------------------------------------------
 
@@ -353,7 +400,9 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
             self._answer(message)
         elif kind == "ready":
             _LOGGER.debug("Panel %s is ready", self.config_entry.title)
-            self.async_set_updated_data(PanelData(connected=True, ready=True))
+            self.async_set_updated_data(replace(self.data, ready=True))
+        elif kind == "display_state":
+            self._display_state(message)
         else:
             _LOGGER.debug("Panel %s sent %s", self.config_entry.title, kind)
 

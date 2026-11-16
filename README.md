@@ -5,8 +5,9 @@
 [![Tests](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml/badge.svg)](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Work in progress.** A panel can be added and paired, and shows and
-> controls a room; the display, sensors and notifications are still to come.
+> **Work in progress.** A panel can be added and paired, shows and controls
+> a room, and its display and settings can be changed from Home Assistant;
+> sensors and notifications are still to come.
 
 Turns a Nest Learning Thermostat (2nd generation), running the
 [Nesto firmware](https://github.com/jorgediez/nesto-firmware), into a room
@@ -111,11 +112,42 @@ entity's last known state again.
 
 ## Entities
 
+- **Display** (light): on while the screen shows the controls or the standby
+  clock, off when the screen is off. Its brightness is what the screen shows
+  now, which is lower in standby, and in a dark room with auto brightness.
+  Turning it on wakes the screen; turning it on with a brightness also changes
+  the *Brightness* setting. Turning it off switches the screen off until you
+  touch the panel (unless *Wake from off by touch* is off) or turn it on again.
 - **Identify** (button, under configuration): the panel wakes, pulses its
   backlight and beeps three times, so you can tell which one it is.
 
-Entities are unavailable while the panel can't be reached; Home Assistant
-keeps trying, every minute at most.
+The display and the button are unavailable while the panel can't be reached;
+Home Assistant keeps trying, every minute at most.
+
+### Settings
+
+These are under configuration on the panel's device page. Home Assistant keeps
+them and sends them to the panel whenever one changes, and each time the panel
+connects. They stay available while the panel is away; a change made then
+reaches it when it's back. They start at the firmware's defaults (shown in
+brackets), so a panel nobody has configured behaves as it always has.
+
+| Setting | What it does |
+|---|---|
+| Brightness | The screen's brightness while showing the controls, 1–100% (80%). |
+| Standby brightness | The brightness of the standby clock, 0–100% (20%). |
+| Screen timeout | Seconds without a touch before the screen goes to standby, or off when *Standby screen* is *Screen off*; 0 means never (30). |
+| Auto brightness | Dims both brightnesses in a dark room, down to a quarter, using the panel's light sensor (on). |
+| Wake on motion | A hand near the glass wakes the panel from standby (on). |
+| Wake from off by touch | Turning the ring or pressing wakes the screen from off. When this is off, only Home Assistant can turn it back on (on). |
+| Standby screen | *Clock*, or *Screen off* instead of standby (Clock). |
+| Clock style | *Analog* or *Digital* (Analog). |
+| Clock seconds | The clock shows seconds (off). |
+| Clock date | The clock shows the date (on). |
+| 12-hour clock | A 12-hour clock instead of 24 (off). |
+| Ring click | A click on each step of the ring (on). |
+| Press click | A click on pressing the screen (off). |
+| Notification sounds | Notifications may beep (on). |
 
 ## Troubleshooting
 
@@ -130,12 +162,14 @@ logger:
 ```
 
 The integration's diagnostics (*Settings → Devices & services → Nesto Panel
-→ ⋮ → Download diagnostics*) say how the panel and its connection stand, and
-how many items of each kind it shows. The pairing key, the address, the panel
+→ ⋮ → Download diagnostics*) say how the panel and its connection stand, how
+many items of each kind it shows, the display's state and the settings. The pairing key, the address, the panel
 id, and which entities and areas it shows are left out.
 
 - **The panel shows only its name:** it isn't in an area yet (see *Choosing
   the room*), or the area has nothing the panel can show.
+- **The screen stays off:** something turned the *Display* light off, and
+  *Wake from off by touch* is off. Turn the light on, or that setting.
 - **An entity is missing:** check it's in the panel's area (or its device is),
   that it isn't hidden, and that it's of a kind the panel shows. Sensors only
   appear when picked in the options.
@@ -153,8 +187,9 @@ restart.
 Nothing goes over the internet: the panel and Home Assistant talk only on your
 network. Anyone at the panel can control what it shows, as with a light
 switch on the wall: leave out of its room anything that shouldn't be one
-press away, such as a lock or an alarm script. Home Assistant keeps the panel's address and the pairing key in its
-config entry. The key works like a password for the panel: anyone holding it
+press away, such as a lock or an alarm script. Home Assistant keeps the
+panel's address and the pairing key in its config entry, and the panel's
+settings in its storage, deleted when you remove the panel. The key works like a password for the panel: anyone holding it
 can act as this Home Assistant towards the panel, so it's left out of the
 diagnostics, along with the address and the panel id.
 
@@ -164,8 +199,8 @@ Home Assistant writes to the panel only what the panel exists to show: when a
 connection opens it sends the time, the panel's settings, the room's layout
 and the entities' states, and afterwards whatever changes. The panel keeps no
 settings of its own to overwrite: its menu only pairs, forgets Home Assistant
-and shows information, and the settings Home Assistant sends first are the
-firmware's defaults. Anything else, such as a notification, is sent only when
+and shows information, and the settings Home Assistant sends are the
+firmware's defaults until you change one. Anything else, such as a notification, is sent only when
 you call an action or change an entity.
 
 ## Disclaimer

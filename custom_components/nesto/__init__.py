@@ -17,16 +17,24 @@ from homeassistant.exceptions import (
 from .client import AuthenticationFailed, NestoClient, NestoError, UnsupportedProtocol
 from .const import CONF_KEY, DOMAIN, UNPAIR_TIMEOUT
 from .coordinator import NestoConfigEntry, NestoCoordinator
+from .settings import Settings
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.BUTTON]
+PLATFORMS: list[Platform] = [
+    Platform.BUTTON,
+    Platform.LIGHT,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SWITCH,
+]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: NestoConfigEntry) -> bool:
     """Connect to the panel, then set up its entities."""
     coordinator = NestoCoordinator(hass, entry)
     placeholders = {"name": entry.title, "host": entry.data[CONF_HOST]}
+    await coordinator.settings.async_load()
     try:
         await coordinator.async_connect()
     except AuthenticationFailed as err:
@@ -70,11 +78,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: NestoConfigEntry) -> bo
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: NestoConfigEntry) -> None:
-    """Tell the panel to forget the key, so it waits to be paired again.
+    """Delete the panel's settings, and tell it to forget the key.
 
-    Best effort: a panel that's off or gone is removed all the same, and keeps
-    a key nobody holds until someone pairs it or chooses Forget on it.
+    Forgetting is best effort: a panel that's off or gone is removed all the
+    same, and keeps a key nobody holds until someone pairs it or chooses
+    Forget on it.
     """
+    await Settings(hass, entry.entry_id).async_remove()
     client = NestoClient(entry.data[CONF_HOST], entry.data[CONF_PORT])
     try:
         async with asyncio.timeout(UNPAIR_TIMEOUT):
