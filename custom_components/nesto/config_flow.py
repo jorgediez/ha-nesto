@@ -1,4 +1,7 @@
-"""Config flow for Nesto Panel: discovery, pairing, reauth and reconfigure.
+"""Config and options flows for Nesto Panel.
+
+The config flow finds a panel, pairs with it, pairs again, or changes its
+address; the options flow chooses what the panel shows.
 
 Pairing (PROTOCOL.md section 6) happens over one connection that stays open
 between steps: Home Assistant starts it, the panel shows a six-digit code, and
@@ -17,13 +20,22 @@ import voluptuous as vol
 
 from homeassistant.config_entries import (
     SOURCE_REAUTH,
+    ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
+    OptionsFlowWithReload,
 )
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .client import (
@@ -35,7 +47,20 @@ from .client import (
     PanelError,
     UnsupportedProtocol,
 )
-from .const import CONF_KEY, CONF_PANEL_ID, DEFAULT_PORT, DOMAIN, panel_title
+from .const import (
+    CONF_ENTITIES,
+    CONF_EXCLUDE,
+    CONF_KEY,
+    CONF_MODE,
+    CONF_PANEL_ID,
+    CONF_SENSORS,
+    DEFAULT_PORT,
+    DOMAIN,
+    MODE_MANUAL,
+    MODE_ROOM,
+    panel_title,
+)
+from .room import DOMAIN_KINDS, area_entities, panel_area
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -265,3 +290,104 @@ class NestoConfigFlow(ConfigFlow, domain=DOMAIN):
         if self._client is not None:
             client, self._client = self._client, None
             self.hass.async_create_task(client.close(), eager_start=True)
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> NestoOptionsFlow:
+        """Return the options flow: what the panel shows."""
+        return NestoOptionsFlow()
+
+
+class NestoOptionsFlow(OptionsFlowWithReload):
+    """Choose what the panel shows: its device's area, or picked entities.
+
+    Saving reloads the entry, which connects again and sends the new layout.
+    The entry has no update listener, which reauth and reconfigure rule out.
+    """
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose room or manual mode."""
+        if user_input is not None:
+            if user_input[CONF_MODE] == MODE_MANUAL:
+                return await self.async_step_manual()
+            return await self.async_step_room()
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_MODE): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[MODE_ROOM, MODE_MANUAL],
+                        mode=SelectSelectorMode.LIST,
+                        translation_key=CONF_MODE,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, {CONF_MODE: self.config_entry.options.get(CONF_MODE, MODE_ROOM)}
+            ),
+        )
+
+    async def async_step_room(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Leave out some of the area's entities, and add sensors."""
+        if user_input is not None:
+            return self.async_create_entry(
+                data={
+                    CONF_MODE: MODE_ROOM,
+                    CONF_EXCLUDE: user_input.get(CONF_EXCLUDE, []),
+                    CONF_SENSORS: user_input.get(CONF_SENSORS, []),
+                }
+            )
+        entry = self.config_entry
+        area = panel_area(self.hass, entry.entry_id, entry.unique_id or "")
+        fields: dict[Any, Any] = {}
+        if area is not None:
+            fields[vol.Optional(CONF_EXCLUDE)] = EntitySelector(
+                EntitySelectorConfig(
+                    multiple=True, include_entities=area_entities(self.hass, area.id)
+                )
+            )
+        fields[vol.Optional(CONF_SENSORS)] = EntitySelector(
+            EntitySelectorConfig(multiple=True, domain="sensor")
+        )
+        return self.async_show_form(
+            step_id="room" if area is not None else "room_no_area",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(fields), self.config_entry.options
+            ),
+            description_placeholders={"area": area.name if area else ""},
+        )
+
+    async_step_room_no_area = async_step_room
+
+    async def async_step_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pick the entities, in any of the domains the panel can show."""
+        if user_input is not None:
+            return self.async_create_entry(
+                data={
+                    CONF_MODE: MODE_MANUAL,
+                    CONF_ENTITIES: user_input.get(CONF_ENTITIES, []),
+                }
+            )
+        schema = vol.Schema(
+            {
+                vol.Optional(CONF_ENTITIES): EntitySelector(
+                    EntitySelectorConfig(
+                        multiple=True, reorder=True, domain=sorted(DOMAIN_KINDS)
+                    )
+                )
+            }
+        )
+        return self.async_show_form(
+            step_id="manual",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, self.config_entry.options
+            ),
+        )

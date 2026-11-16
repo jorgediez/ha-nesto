@@ -1,13 +1,12 @@
 # Nesto Panel for Home Assistant
 
-[![Marketplace](https://img.shields.io/badge/Marketplace-Default-41BDF5.svg?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/integrations/marketplace/)
+[![Marketplace](https://img.shields.io/badge/Marketplace-Custom-41BDF5.svg?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/integrations/marketplace/)
 [![Validate](https://github.com/jorgediez/ha-nesto/actions/workflows/validate.yml/badge.svg)](https://github.com/jorgediez/ha-nesto/actions/workflows/validate.yml)
 [![Tests](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml/badge.svg)](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Work in progress.** A panel can be added and paired, and stays
-> connected; the room's controls, the display, sensors and notifications are
-> still to come.
+> **Work in progress.** A panel can be added and paired, and shows and
+> controls a room; the display, sensors and notifications are still to come.
 
 Turns a Nest Learning Thermostat (2nd generation), running the
 [Nesto firmware](https://github.com/jorgediez/nesto-firmware), into a room
@@ -29,8 +28,8 @@ Tested with: the simulator from nesto-firmware. Real thermostats follow.
 Planned for the first release:
 
 - Discovery, and pairing with the code the panel shows.
-- Room mode (an area, minus anything you exclude) or manual mode (the
-  entities you pick).
+- Room mode (the panel's area, minus anything you exclude) or manual mode
+  (the entities you pick).
 - The panel's display as a light, its standby screen as a select, and its
   settings as configuration entities.
 - Its temperature, humidity, light and motion sensors.
@@ -68,6 +67,48 @@ another one refuses: choose *Settings → Pair* on the panel first, then add it.
   one added by hand, choose **Reconfigure** on its entry; Home Assistant checks
   it's still the same panel.
 
+## Choosing the room
+
+The panel shows the area its device is in. Home Assistant asks for an area
+when you add the panel; to change it, open the panel's device page and set
+its area. Until it's in an area, the panel shows only its name.
+
+In the area, the panel shows the lights, switches, input booleans, fans
+without speed control, scenes, scripts, climate entities and covers: those
+put in the area, and those whose device is in it, unless the entity was put
+in another area. Hidden entities, and configuration and diagnostic ones, are
+left out. Entities you add to the area later appear on the panel by
+themselves. The area's name is the panel's title, and dropped from the front
+of the entities' names ("Living room lamp" shows as "Lamp").
+
+The integration's **Configure** options change that:
+
+- **The panel's room:** leave out some of the area's entities, and add
+  sensors, which a room doesn't show unless you pick them.
+- **Entities I pick:** the panel shows the entities you choose, whatever their
+  area, under the entry's name.
+
+Either way, the panel groups what it shows: an **All lights** item when there
+are two or more lights, then lights, climate, covers, switches, scenes and
+sensors, each sorted by name. It shows 48 items at most; the log says which
+were left out. Saving the options reconnects the panel, which takes a second.
+
+What each kind can do on the panel:
+
+| Kind | From | On the panel |
+|---|---|---|
+| Light | `light` | On, off, brightness, colour temperature, colour and effects, as the light supports |
+| All lights | every light shown | On, off and brightness for all of them at once |
+| Switch | `switch`, `input_boolean`, `fan` without speeds | On and off |
+| Scene | `scene`, `script` | Activate (a script starts; the panel doesn't wait for it to finish) |
+| Climate | `climate` | Target temperature or range, HVAC mode, preset and fan mode, as the entity supports |
+| Cover | `cover` | Open, close, stop, position and tilt, as the cover supports |
+| Sensor | `sensor` | Its value, with the precision Home Assistant shows; read only |
+
+When something on the panel can't be done (the entity is unavailable, or its
+action fails in Home Assistant), the panel says so briefly and shows the
+entity's last known state again.
+
 ## Entities
 
 - **Identify** (button, under configuration): the panel wakes, pulses its
@@ -89,8 +130,15 @@ logger:
 ```
 
 The integration's diagnostics (*Settings → Devices & services → Nesto Panel
-→ ⋮ → Download diagnostics*) say how the panel and its connection stand. The
-pairing key, the address and the panel id are left out.
+→ ⋮ → Download diagnostics*) say how the panel and its connection stand, and
+how many items of each kind it shows. The pairing key, the address, the panel
+id, and which entities and areas it shows are left out.
+
+- **The panel shows only its name:** it isn't in an area yet (see *Choosing
+  the room*), or the area has nothing the panel can show.
+- **An entity is missing:** check it's in the panel's area (or its device is),
+  that it isn't hidden, and that it's of a kind the panel shows. Sensors only
+  appear when picked in the options.
 
 ## Removal
 
@@ -103,7 +151,9 @@ restart.
 ## Privacy
 
 Nothing goes over the internet: the panel and Home Assistant talk only on your
-network. Home Assistant keeps the panel's address and the pairing key in its
+network. Anyone at the panel can control what it shows, as with a light
+switch on the wall: leave out of its room anything that shouldn't be one
+press away, such as a lock or an alarm script. Home Assistant keeps the panel's address and the pairing key in its
 config entry. The key works like a password for the panel: anyone holding it
 can act as this Home Assistant towards the panel, so it's left out of the
 diagnostics, along with the address and the panel id.

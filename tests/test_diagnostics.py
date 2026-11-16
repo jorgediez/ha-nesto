@@ -41,3 +41,12 @@ async def test_diagnostics(
         "ready": False,
         "last_error": "CannotConnect: refused",
     }
+    assert result["room"] == {
+        "mode": "room",
+        "excluded": 0,
+        "sensors": 0,
+        "entities": 0,
+        "items": {},
+        "waiting_for_state": 0,
+        "left_out": 0,
+    }
