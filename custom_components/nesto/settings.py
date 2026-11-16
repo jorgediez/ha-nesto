@@ -5,6 +5,9 @@ object every time, and the panel stores the latest copy only to show its clock
 before Home Assistant connects. So the settings live here, one store per panel,
 starting from the firmware's own defaults: until the user changes one, the
 panel behaves as it would with no settings at all.
+
+A few settings are Home Assistant's own, such as the temperature offset: they
+are kept here too, under `local`, and never sent.
 """
 
 from __future__ import annotations
@@ -43,6 +46,14 @@ DEFAULTS: Final[dict[str, Any]] = {
     "sound": {"ring_click": True, "press_click": False, "notifications": True},
 }
 
+# Home Assistant's own settings for the panel, never sent to it.
+LOCAL: Final = "local"
+LOCAL_DEFAULTS: Final[dict[str, Any]] = {
+    # Added to the raw temperature, which the head unit's own warmth raises.
+    "temperature_offset": 0.0,
+}
+ALL_DEFAULTS: Final[dict[str, Any]] = {**DEFAULTS, LOCAL: LOCAL_DEFAULTS}
+
 
 def _merge(defaults: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]:
     """Return the defaults with what was stored on top.
@@ -57,6 +68,8 @@ def _merge(defaults: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]:
             merged[key] = _merge(default, value if isinstance(value, dict) else {})
         elif type(value) is type(default):
             merged[key] = value
+        elif type(default) is float and type(value) is int:
+            merged[key] = float(value)
         else:
             merged[key] = default
     return merged
@@ -70,13 +83,13 @@ class Settings:
         self._store: Store[dict[str, Any]] = Store(
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry_id}"
         )
-        self._data = copy.deepcopy(DEFAULTS)
+        self._data = copy.deepcopy(ALL_DEFAULTS)
 
     async def async_load(self) -> None:
         """Read the stored settings, if any."""
         stored = await self._store.async_load()
         if isinstance(stored, dict):
-            self._data = _merge(DEFAULTS, stored)
+            self._data = _merge(ALL_DEFAULTS, stored)
 
     def get(self, path: Path) -> Any:
         """Return one setting."""
@@ -98,8 +111,10 @@ class Settings:
         return True
 
     def as_config(self) -> dict[str, Any]:
-        """Return the `config` message to send."""
-        return {"t": "config", **copy.deepcopy(self._data)}
+        """Return the `config` message to send, without the local settings."""
+        config = copy.deepcopy(self._data)
+        del config[LOCAL]
+        return {"t": "config", **config}
 
     async def async_remove(self) -> None:
         """Delete the stored settings, when the panel is removed."""

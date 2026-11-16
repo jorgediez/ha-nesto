@@ -8,8 +8,8 @@ on what the panel sends, and connects again when the connection drops.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, replace
-from datetime import datetime
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 import logging
 import time
 from typing import Any
@@ -24,8 +24,10 @@ from homeassistant.helpers import (
     entity_registry as er,
     issue_registry as ir,
 )
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
     async_track_state_change_event,
+    async_track_time_interval,
     async_track_utc_time_change,
 )
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -49,7 +51,7 @@ from .room import (
     diff,
     item_state,
 )
-from .settings import Path, Settings
+from .settings import LOCAL, Path, Settings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,6 +69,31 @@ class WrongPanel(CannotConnect):
 # The display's states (section 13).
 DISPLAY_STATES = ("active", "standby", "off")
 
+# A `sensors` message's fields and their types (section 17).
+SENSOR_FIELDS: dict[str, type] = {
+    "temperature_c": float,
+    "humidity_pct": float,
+    "illuminance_raw": int,
+    "motion_near": bool,
+    "motion_far": bool,
+    "supply_v": float,
+    "usb_v": float,
+    "battery_v": float,
+}
+# Press gestures and where they happen (section 17).
+GESTURES = ("single", "double", "long")
+CONTEXTS = ("ui", "standby", "off")
+# How often to ask the panel how it stands, for the status entities.
+STATUS_INTERVAL = timedelta(minutes=5)
+# A restart time that moves less than this is the same restart: uptime is
+# counted in whole seconds, and the answer takes a moment to arrive.
+RESTART_TOLERANCE = timedelta(minutes=1)
+
+
+def signal_input(entry_id: str) -> str:
+    """Return the dispatcher signal for a panel's press gestures."""
+    return f"{DOMAIN}_{entry_id}_input"
+
 
 @dataclass(frozen=True)
 class DisplayState:
@@ -74,6 +101,17 @@ class DisplayState:
 
     state: str  # one of DISPLAY_STATES
     brightness: int  # 0 to 100, as the screen shows it now
+
+
+@dataclass(frozen=True)
+class PanelStatus:
+    """How the panel stands, from its last `info` answer (section 18)."""
+
+    last_restart: datetime | None = None
+    free_ram_kb: int | None = None
+    ip: str | None = None
+    base_connected: bool | None = None
+    base_fw: str | None = None
 
 
 @dataclass(frozen=True)
@@ -85,6 +123,10 @@ class PanelData:
     ready: bool = False
     # None until the panel reports it, right after synchronising.
     display: DisplayState | None = None
+    # The last `sensors` message's readings; a sensor that isn't working is
+    # left out.
+    sensors: dict[str, Any] = field(default_factory=dict)
+    status: PanelStatus | None = None
 
 
 class NestoCoordinator(DataUpdateCoordinator[PanelData]):
@@ -120,6 +162,8 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         self._untrack_states: CALLBACK_TYPE | None = None
         self._left_out: tuple[str, ...] = ()
         self.settings = Settings(hass, entry.entry_id)
+        # The sensors the panel had when its entities were set up.
+        self.sensor_caps: frozenset[str] | None = None
 
     @property
     def panel_id(self) -> str:
@@ -164,6 +208,7 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
             raise
         self.last_error = None
         ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
+        self._check_sensor_caps(hello)
         self._update_device(hello)
         if self._was_connected:
             _LOGGER.info("Panel %s is back", entry.title)
@@ -177,6 +222,93 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         async with self._send_lock:
             await self._async_send_room(self.build_layout())
 
+    # Sensors, status and gestures --------------------------------------------
+
+    @callback
+    def _check_sensor_caps(self, hello: Hello) -> None:
+        """Reload when the panel's sensors changed, to add or drop entities.
+
+        A Nest Gen 2 lists its base's sensors only while it has a base.
+        """
+        sensors = hello.caps.get("sensors")
+        caps = frozenset(sensors) if isinstance(sensors, list) else frozenset()
+        if self.sensor_caps is None:
+            self.sensor_caps = caps
+        elif caps != self.sensor_caps:
+            _LOGGER.info(
+                "Panel %s has other sensors now; reloading", self.config_entry.title
+            )
+            self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
+
+    @callback
+    def _sensors(self, message: dict[str, Any]) -> None:
+        readings: dict[str, Any] = {}
+        for name, kind in SENSOR_FIELDS.items():
+            value = message.get(name)
+            if kind is bool:
+                if isinstance(value, bool):
+                    readings[name] = value
+            elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                readings[name] = kind(value)
+        self.async_set_updated_data(replace(self.data, sensors=readings))
+
+    @callback
+    def _input(self, message: dict[str, Any]) -> None:
+        """Pass a press gesture on, once the panel is ready (section 8)."""
+        gesture, context = message.get("gesture"), message.get("context")
+        if not self.data.ready or gesture not in GESTURES or context not in CONTEXTS:
+            return
+        async_dispatcher_send(
+            self.hass, signal_input(self.config_entry.entry_id), gesture, context
+        )
+
+    async def _async_refresh_status(self, _now: datetime | None = None) -> None:
+        """Ask the panel how it stands, for the status entities."""
+        client = self.client
+        if client is None or not self.data.ready:
+            return
+        try:
+            info = await client.request({"t": "info"})
+        except NestoError as err:
+            _LOGGER.debug("Couldn't ask the panel how it stands: %s", err)
+            return
+        if not self.data.connected:
+            return
+        self.async_set_updated_data(
+            replace(self.data, status=self._status(info, self.data.status))
+        )
+
+    @staticmethod
+    def _status(info: dict[str, Any], last: PanelStatus | None) -> PanelStatus:
+        uptime = info.get("uptime_s")
+        restart: datetime | None = None
+        if isinstance(uptime, (int, float)) and not isinstance(uptime, bool):
+            restart = dt_util.utcnow().replace(microsecond=0) - timedelta(
+                seconds=uptime
+            )
+            if (
+                last is not None
+                and last.last_restart is not None
+                and abs(restart - last.last_restart) < RESTART_TOLERANCE
+            ):
+                restart = last.last_restart
+
+        def typed(name: str, kind: type) -> Any:
+            value = info.get(name)
+            if isinstance(value, kind) and (
+                kind is bool or not isinstance(value, bool)
+            ):
+                return value
+            return None
+
+        return PanelStatus(
+            last_restart=restart,
+            free_ram_kb=typed("free_ram_kb", int),
+            ip=typed("ip", str),
+            base_connected=typed("base_connected", bool),
+            base_fw=typed("base_fw", str),
+        )
+
     # Settings and the display --------------------------------------------------
 
     async def async_set_setting(self, path: Path, value: Any) -> None:
@@ -187,7 +319,7 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         if not self.settings.set(path, value):
             return
         self.async_update_listeners()
-        if not self.connected:
+        if not self.connected or path[0] == LOCAL:
             return
         try:
             await self._async_send(self.settings.as_config())
@@ -343,6 +475,14 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
                 self.hass.bus.async_listen(event_type, self._async_room_changed)
             )
         entry.async_on_unload(self._untrack)
+        entry.async_on_unload(
+            async_track_time_interval(
+                self.hass,
+                self._async_refresh_status,
+                STATUS_INTERVAL,
+                name=f"{DOMAIN} status",
+            )
+        )
 
     async def _async_hourly(self, now: datetime) -> None:
         try:
@@ -401,8 +541,15 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         elif kind == "ready":
             _LOGGER.debug("Panel %s is ready", self.config_entry.title)
             self.async_set_updated_data(replace(self.data, ready=True))
+            self.config_entry.async_create_background_task(
+                self.hass, self._async_refresh_status(), name=f"{DOMAIN} status"
+            )
         elif kind == "display_state":
             self._display_state(message)
+        elif kind == "sensors":
+            self._sensors(message)
+        elif kind == "input":
+            self._input(message)
         else:
             _LOGGER.debug("Panel %s sent %s", self.config_entry.title, kind)
 

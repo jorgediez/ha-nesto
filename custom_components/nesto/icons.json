@@ -1,5 +1,21 @@
 {
   "entity": {
+    "binary_sensor": {
+      "proximity": {
+        "default": "mdi:hand-wave-outline",
+        "state": {
+          "off": "mdi:hand-back-left-off-outline"
+        }
+      },
+      "base_connected": {
+        "default": "mdi:connection"
+      }
+    },
+    "event": {
+      "press": {
+        "default": "mdi:gesture-tap"
+      }
+    },
     "light": {
       "display": {
         "default": "mdi:tablet"
@@ -14,6 +30,9 @@
       },
       "display_timeout_s": {
         "default": "mdi:timer-outline"
+      },
+      "local_temperature_offset": {
+        "default": "mdi:thermometer-plus"
       }
     },
     "select": {
@@ -22,6 +41,29 @@
       },
       "standby_clock_style": {
         "default": "mdi:clock-outline"
+      }
+    },
+    "sensor": {
+      "illuminance": {
+        "default": "mdi:brightness-5"
+      },
+      "battery_voltage": {
+        "default": "mdi:battery"
+      },
+      "supply_voltage": {
+        "default": "mdi:power-plug"
+      },
+      "usb_voltage": {
+        "default": "mdi:usb-port"
+      },
+      "free_memory": {
+        "default": "mdi:memory"
+      },
+      "ip_address": {
+        "default": "mdi:ip-network"
+      },
+      "base_firmware": {
+        "default": "mdi:chip"
       }
     },
     "switch": {

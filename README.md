@@ -6,8 +6,8 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 > **Work in progress.** A panel can be added and paired, shows and controls
-> a room, and its display and settings can be changed from Home Assistant;
-> sensors and notifications are still to come.
+> a room, reports its sensors and presses, and its display and settings can
+> be changed from Home Assistant; notifications are still to come.
 
 Turns a Nest Learning Thermostat (2nd generation), running the
 [Nesto firmware](https://github.com/jorgediez/nesto-firmware), into a room
@@ -118,11 +118,48 @@ entity's last known state again.
   Turning it on wakes the screen; turning it on with a brightness also changes
   the *Brightness* setting. Turning it off switches the screen off until you
   touch the panel (unless *Wake from off by touch* is off) or turn it on again.
+- **Temperature**, **Humidity** (sensors): the base's readings, every 30
+  seconds. Temperature includes the *Temperature offset* setting.
+- **Light level** (sensor): the light sensor's raw value, higher brighter. It
+  isn't in lux: about 100 in a dark room, 2000 in a lit one.
+- **Motion** (binary sensor): someone moving in the room; off 30 seconds after
+  the last movement.
+- **Proximity** (binary sensor): a hand near the glass; off 5 seconds after
+  it's gone.
+- **Press** (event): a single, double or long press. The event's `context`
+  says where: `ui` (on the controls, which it also worked), `standby` or
+  `off`. A double press only comes in standby or off, and doesn't wake the
+  panel, so it can trigger anything while the panel stays asleep.
 - **Identify** (button, under configuration): the panel wakes, pulses its
   backlight and beeps three times, so you can tell which one it is.
+- Under diagnostic: **Battery voltage**, **Last restart** and **Base
+  connected**; and, disabled until you enable them, **Supply voltage**, **USB
+  voltage**, **Free memory**, **IP address** and **Base firmware**. Home
+  Assistant asks the panel for these every five minutes.
 
-The display and the button are unavailable while the panel can't be reached;
-Home Assistant keeps trying, every minute at most.
+The sensors exist only for a panel on its base: a head unit off its base has
+none, and when it's put back, its entry reloads and they appear. Everything
+except the settings is unavailable while the panel can't be reached; Home
+Assistant keeps trying, every minute at most.
+
+To turn the room's lights off with a double press while the panel sleeps
+(the trigger fires on every press; the condition picks the double ones):
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: event.nesto_panel_0a1b2c_press
+    not_to: unavailable
+conditions:
+  - condition: state
+    entity_id: event.nesto_panel_0a1b2c_press
+    attribute: event_type
+    state: double_press
+actions:
+  - action: light.turn_off
+    target:
+      area_id: living_room
+```
 
 ### Settings
 
@@ -148,6 +185,7 @@ brackets), so a panel nobody has configured behaves as it always has.
 | Ring click | A click on each step of the ring (on). |
 | Press click | A click on pressing the screen (off). |
 | Notification sounds | Notifications may beep (on). |
+| Temperature offset | Added to the temperature reading, −10 to +10 °C (0). The head unit warms itself, so its reading runs high: set this to the difference from a thermometer next to it. Home Assistant's own, never sent to the panel; only on a panel with a temperature sensor. |
 
 ## Troubleshooting
 
@@ -163,11 +201,14 @@ logger:
 
 The integration's diagnostics (*Settings → Devices & services → Nesto Panel
 → ⋮ → Download diagnostics*) say how the panel and its connection stand, how
-many items of each kind it shows, the display's state and the settings. The pairing key, the address, the panel
+many items of each kind it shows, the display's state, the settings, the
+panel's status, and which sensors reported. The pairing key, the address, the panel
 id, and which entities and areas it shows are left out.
 
 - **The panel shows only its name:** it isn't in an area yet (see *Choosing
   the room*), or the area has nothing the panel can show.
+- **No temperature, humidity or motion:** the head unit isn't on its base, or
+  the base doesn't answer (*Base connected* is off).
 - **The screen stays off:** something turned the *Display* light off, and
   *Wake from off by touch* is off. Turn the light on, or that setting.
 - **An entity is missing:** check it's in the panel's area (or its device is),
@@ -189,9 +230,10 @@ network. Anyone at the panel can control what it shows, as with a light
 switch on the wall: leave out of its room anything that shouldn't be one
 press away, such as a lock or an alarm script. Home Assistant keeps the
 panel's address and the pairing key in its config entry, and the panel's
-settings in its storage, deleted when you remove the panel. The key works like a password for the panel: anyone holding it
-can act as this Home Assistant towards the panel, so it's left out of the
-diagnostics, along with the address and the panel id.
+settings in its storage, deleted when you remove the panel. The key works
+like a password for the panel: anyone holding it can act as this Home
+Assistant towards the panel, so it's left out of the diagnostics, along with
+the address and the panel id.
 
 ## Writing to the panel
 

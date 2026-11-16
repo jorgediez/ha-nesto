@@ -2,11 +2,11 @@
 
 They say how the panel and its connection stand: the firmware, model,
 protocol and capabilities the panel announced, whether it's connected, the
-last error, how many items of each kind it shows, the display's state and
-the panel's settings. Left out: the pairing
-key, which works like a password; the panel's address and id (its Wi-Fi MAC
-address), which identify the device and the network; and which entities and
-areas the panel shows, which describe the home.
+last error, how many items of each kind it shows, the display's state, the
+panel's settings and status, and which sensors last reported. Left out: the
+pairing key, which works like a password; the panel's address and id (its
+Wi-Fi MAC address), which identify the device and the network; and which
+entities and areas the panel shows, which describe the home.
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ async def async_get_config_entry_diagnostics(
     layout = coordinator.layout
     options = entry.options
     display = coordinator.data.display
+    status = coordinator.data.status
     settings = coordinator.settings.as_config()
     del settings["t"]
     return {
@@ -65,6 +66,14 @@ async def async_get_config_entry_diagnostics(
         },
         "display": asdict(display) if display is not None else None,
         "settings": settings,
+        "temperature_offset": coordinator.settings.get(("local", "temperature_offset")),
+        # The panel's address is left out, like the entry's.
+        "status": (
+            {k: v for k, v in asdict(status).items() if k != "ip"}
+            if status is not None
+            else None
+        ),
+        "sensors": sorted(coordinator.data.sensors),
         "room": {
             "mode": options.get(CONF_MODE, MODE_ROOM),
             "excluded": len(options.get(CONF_EXCLUDE, [])),
