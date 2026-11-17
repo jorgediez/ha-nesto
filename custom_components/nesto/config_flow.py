@@ -27,9 +27,10 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import AbortFlow
+from homeassistant.data_entry_flow import AbortFlow, section
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
     SelectSelector,
@@ -48,19 +49,26 @@ from .client import (
     UnsupportedProtocol,
 )
 from .const import (
+    CONF_ALL_LIGHTS,
+    CONF_AREA,
     CONF_ENTITIES,
-    CONF_EXCLUDE,
     CONF_KEY,
     CONF_MODE,
     CONF_PANEL_ID,
-    CONF_SENSORS,
+    CONF_REMOVED,
     DEFAULT_PORT,
     DOMAIN,
     MODE_MANUAL,
     MODE_ROOM,
     panel_title,
 )
-from .room import DOMAIN_KINDS, area_entities, panel_area
+from .room import (
+    SECTIONS,
+    panel_area,
+    removed_from_area,
+    section_domains,
+    section_lists,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -299,8 +307,10 @@ class NestoConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class NestoOptionsFlow(OptionsFlowWithReload):
-    """Choose what the panel shows: its device's area, or picked entities.
+    """Choose what the panel shows, section by section, in order.
 
+    Both modes end in the same form: one ordered list per section. Room mode
+    fills it from the area the panel's device is in; manual mode starts empty.
     Saving reloads the entry, which connects again and sends the new layout.
     The entry has no update listener, which reauth and reconfigure rule out.
     """
@@ -334,33 +344,26 @@ class NestoOptionsFlow(OptionsFlowWithReload):
     async def async_step_room(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Leave out some of the area's entities, and add sensors."""
+        """Order the area's entities, take some off, or add others."""
+        entry = self.config_entry
+        area = panel_area(self.hass, entry.entry_id, entry.unique_id or "")
         if user_input is not None:
+            lists = _lists_from(user_input)
             return self.async_create_entry(
                 data={
                     CONF_MODE: MODE_ROOM,
-                    CONF_EXCLUDE: user_input.get(CONF_EXCLUDE, []),
-                    CONF_SENSORS: user_input.get(CONF_SENSORS, []),
+                    **lists,
+                    CONF_ALL_LIGHTS: _all_lights_from(user_input),
+                    CONF_AREA: area.id if area is not None else None,
+                    CONF_REMOVED: removed_from_area(self.hass, area, lists),
                 }
             )
-        entry = self.config_entry
-        area = panel_area(self.hass, entry.entry_id, entry.unique_id or "")
-        fields: dict[Any, Any] = {}
-        if area is not None:
-            fields[vol.Optional(CONF_EXCLUDE)] = EntitySelector(
-                EntitySelectorConfig(
-                    multiple=True, include_entities=area_entities(self.hass, area.id)
-                )
-            )
-        fields[vol.Optional(CONF_SENSORS)] = EntitySelector(
-            EntitySelectorConfig(multiple=True, domain="sensor")
-        )
-        return self.async_show_form(
-            step_id="room" if area is not None else "room_no_area",
-            data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(fields), self.config_entry.options
-            ),
-            description_placeholders={"area": area.name if area else ""},
+        # What the panel shows now, or would in room mode.
+        lists = section_lists(self.hass, {**entry.options, CONF_MODE: MODE_ROOM}, area)
+        return self._show_sections(
+            "room" if area is not None else "room_no_area",
+            lists,
+            {"area": area.name if area is not None else ""},
         )
 
     async_step_room_no_area = async_step_room
@@ -368,26 +371,62 @@ class NestoOptionsFlow(OptionsFlowWithReload):
     async def async_step_manual(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Pick the entities, in any of the domains the panel can show."""
+        """Pick the entities to show, from anywhere, in order."""
         if user_input is not None:
             return self.async_create_entry(
                 data={
                     CONF_MODE: MODE_MANUAL,
-                    CONF_ENTITIES: user_input.get(CONF_ENTITIES, []),
+                    **_lists_from(user_input),
+                    CONF_ALL_LIGHTS: _all_lights_from(user_input),
                 }
             )
-        schema = vol.Schema(
-            {
+        options = self.config_entry.options
+        if options.get(CONF_MODE) == MODE_MANUAL:
+            lists = section_lists(self.hass, options, None)
+        else:
+            lists = {section: [] for section in SECTIONS}
+        return self._show_sections("manual", lists, {})
+
+    def _show_sections(
+        self, step_id: str, lists: Mapping[str, list[str]], placeholders: dict[str, str]
+    ) -> ConfigFlowResult:
+        """Show one ordered list per section; the empty ones start folded."""
+        fields: dict[Any, Any] = {}
+        suggested: dict[str, dict[str, Any]] = {}
+        for name in SECTIONS:
+            inner: dict[Any, Any] = {
                 vol.Optional(CONF_ENTITIES): EntitySelector(
                     EntitySelectorConfig(
-                        multiple=True, reorder=True, domain=sorted(DOMAIN_KINDS)
+                        multiple=True, reorder=True, domain=section_domains(name)
                     )
                 )
             }
-        )
+            suggested[name] = {CONF_ENTITIES: lists[name]}
+            if name == "lights":
+                inner[vol.Optional(CONF_ALL_LIGHTS)] = BooleanSelector()
+                suggested[name][CONF_ALL_LIGHTS] = self.config_entry.options.get(
+                    CONF_ALL_LIGHTS, False
+                )
+            fields[vol.Required(name)] = section(
+                vol.Schema(inner),
+                {"collapsed": name != "lights" and not lists[name]},
+            )
         return self.async_show_form(
-            step_id="manual",
+            step_id=step_id,
             data_schema=self.add_suggested_values_to_schema(
-                schema, self.config_entry.options
+                vol.Schema(fields), suggested
             ),
+            description_placeholders=placeholders,
         )
+
+
+def _lists_from(user_input: Mapping[str, Any]) -> dict[str, list[str]]:
+    """Return each section's entities as the form gave them, in order."""
+    return {
+        name: list(dict.fromkeys(user_input.get(name, {}).get(CONF_ENTITIES, [])))
+        for name in SECTIONS
+    }
+
+
+def _all_lights_from(user_input: Mapping[str, Any]) -> bool:
+    return bool(user_input.get("lights", {}).get(CONF_ALL_LIGHTS, False))

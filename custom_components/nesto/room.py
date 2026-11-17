@@ -1,10 +1,14 @@
 """What the panel shows: Home Assistant entities as panel items.
 
 PROTOCOL.md appendix A describes the mapping; sections 9 to 11 the messages.
-In room mode the panel shows the area its own device is in, so choosing the
-panel's area in Home Assistant chooses its room; in manual mode the user
-picks the entities. Either way each entity becomes one item, of a kind the
-panel knows, and the panel's intents become service calls.
+The options keep one ordered list of entities per section (lights, climate,
+covers, switches, scenes, sensors), which the panel shows in that order. In
+room mode the lists start as the area the panel's own device is in, so
+choosing the panel's area in Home Assistant chooses its room, and they follow
+the area: entities added to it later come after the user's, by name, and the
+ones the user took off stay off. In manual mode the lists are all there is.
+Either way each entity becomes one item, of a kind the panel knows, and the
+panel's intents become service calls.
 
 Nothing here talks to the panel: the coordinator sends what this module
 builds, and answers intents with what it returns.
@@ -40,10 +44,10 @@ from homeassistant.helpers import (
 )
 
 from .const import (
-    CONF_ENTITIES,
-    CONF_EXCLUDE,
+    CONF_ALL_LIGHTS,
+    CONF_AREA,
     CONF_MODE,
-    CONF_SENSORS,
+    CONF_REMOVED,
     DOMAIN,
     INTENT_TIMEOUT,
     MODE_MANUAL,
@@ -74,6 +78,22 @@ DOMAIN_KINDS: Final = {
 ROOM_DOMAINS: Final = frozenset(DOMAIN_KINDS) - {"sensor"}
 # Appendix A's order: synthetic "all lights", then these.
 KIND_ORDER: Final = ("light", "climate", "cover", "switch", "scene", "sensor")
+# The options' sections, one per kind, in that order.
+SECTIONS: Final = {
+    "lights": "light",
+    "climate": "climate",
+    "covers": "cover",
+    "switches": "switch",
+    "scenes": "scene",
+    "sensors": "sensor",
+}
+SECTION_OF_KIND: Final = {kind: section for section, kind in SECTIONS.items()}
+
+
+def section_domains(section: str) -> list[str]:
+    """Return the domains a section's entities can be in."""
+    return sorted(d for d, kind in DOMAIN_KINDS.items() if kind == SECTIONS[section])
+
 
 FAN_SET_SPEED: Final = 1  # FanEntityFeature.SET_SPEED
 CLIMATE_TARGET: Final = 1  # ClimateEntityFeature.TARGET_TEMPERATURE
@@ -261,17 +281,56 @@ def area_entities(hass: HomeAssistant, area_id: str) -> list[str]:
     ]
 
 
-def chosen_entities(
+def section_lists(
     hass: HomeAssistant, options: Mapping[str, Any], area: ar.AreaEntry | None
-) -> list[str]:
-    """Return the entities the options and the panel's area choose."""
+) -> dict[str, list[str]]:
+    """Return each section's entities, in the order the panel shows them.
+
+    In manual mode, the lists as saved. In room mode, the lists saved for
+    this area, then the area's entities that are in none of them and weren't
+    taken off, by name. Lists saved for another area (the panel moved) give
+    way to the new area's entities; the sensors, which the user always picks,
+    stay.
+    """
+    saved = {
+        section: list(dict.fromkeys(options.get(section, []))) for section in SECTIONS
+    }
     if options.get(CONF_MODE) == MODE_MANUAL:
-        return list(dict.fromkeys(options.get(CONF_ENTITIES, [])))
+        return saved
+    area_id = area.id if area is not None else None
+    removed: set[str] = set()
+    if CONF_AREA in options and options[CONF_AREA] == area_id:
+        removed = set(options.get(CONF_REMOVED, []))
+    else:
+        saved = {section: [] for section in SECTIONS} | {"sensors": saved["sensors"]}
+    if area is None:
+        return saved
+    listed = {entity_id for entities in saved.values() for entity_id in entities}
+    added = [
+        entity_id
+        for entity_id in area_entities(hass, area.id)
+        if entity_id not in listed and entity_id not in removed
+    ]
+    added.sort(key=lambda entity_id: _sort_name(hass, entity_id))
+    for entity_id in added:
+        kind = DOMAIN_KINDS[split_entity_id(entity_id)[0]]
+        saved[SECTION_OF_KIND[kind]].append(entity_id)
+    return saved
+
+
+def removed_from_area(
+    hass: HomeAssistant, area: ar.AreaEntry | None, lists: Mapping[str, list[str]]
+) -> list[str]:
+    """Return the area's entities that none of the lists keep."""
     if area is None:
         return []
-    excluded = set(options.get(CONF_EXCLUDE, []))
-    chosen = [e for e in area_entities(hass, area.id) if e not in excluded]
-    return list(dict.fromkeys([*chosen, *options.get(CONF_SENSORS, [])]))
+    listed = {entity_id for entities in lists.values() for entity_id in entities}
+    return [e for e in area_entities(hass, area.id) if e not in listed]
+
+
+def _sort_name(hass: HomeAssistant, entity_id: str) -> str:
+    state = hass.states.get(entity_id)
+    return (state.name if state is not None else entity_id).casefold()
 
 
 # Building the layout -----------------------------------------------------------
@@ -292,7 +351,9 @@ def build_layout(
         title = area.name
     items: list[Item] = []
     waiting: set[str] = set()
-    for entity_id in chosen_entities(hass, options, area):
+    lists = section_lists(hass, options, area)
+    chosen = dict.fromkeys(e for section in SECTIONS for e in lists[section])
+    for entity_id in chosen:
         state = hass.states.get(entity_id)
         if state is None:
             waiting.add(entity_id)
@@ -301,9 +362,12 @@ def build_layout(
         if item is not None:
             items.append(item)
 
-    items.sort(key=lambda item: (KIND_ORDER.index(item.kind), item.name.casefold()))
+    # The lists are in kind order already; this only keeps an entity saved in
+    # the wrong section with its kind. The sort is stable, so the order within
+    # a kind is the user's.
+    items.sort(key=lambda item: KIND_ORDER.index(item.kind))
     lights = [item for item in items if item.kind == "light"]
-    if len(lights) >= 2:
+    if options.get(CONF_ALL_LIGHTS, False) and len(lights) >= 2:
         items.insert(0, all_lights(lights))
     left_out = tuple(item.entity_id for item in items[MAX_ITEMS:])
     return Layout(

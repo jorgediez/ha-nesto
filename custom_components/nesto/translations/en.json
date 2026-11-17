@@ -66,39 +66,193 @@
           "mode": "Show"
         },
         "data_description": {
-          "mode": "The room: what's in the area you put the panel in, kept up to date as you move entities or the panel. Or entities you pick yourself."
+          "mode": "The room: what's in the area you put the panel in, kept up to date as entities are added to it. Or entities you pick yourself. Either way, the next step lets you order them."
         }
       },
       "room": {
         "title": "The {area} room",
-        "description": "The panel shows the lights, switches, fans, scenes, scripts, climate and covers in {area}. To show another room, move the panel to that area on its device page.",
-        "data": {
-          "exclude": "Leave out",
-          "sensors": "Add sensors"
-        },
-        "data_description": {
-          "exclude": "Entities in {area} the panel shouldn't show.",
-          "sensors": "Sensors to show too, read only: a room's sensors aren't shown unless you pick them here."
+        "description": "The panel shows these, in this order, kind by kind. Entities added to {area} later appear after the ones here; the ones you take off stay off. To show another room, move the panel to that area on its device page.",
+        "sections": {
+          "lights": {
+            "name": "Lights",
+            "data": {
+              "entities": "On the panel, in this order",
+              "all_lights": "Add an 'All lights' item"
+            },
+            "data_description": {
+              "entities": "Lights to show. Starts with the room's. Drag to change the order the panel shows them in.",
+              "all_lights": "First on the panel, it turns all these lights on and off together and dims them. Only with two or more lights."
+            }
+          },
+          "climate": {
+            "name": "Climate",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Thermostats and air conditioners. Starts with the room's. Drag to change the order the panel shows them in."
+            }
+          },
+          "covers": {
+            "name": "Covers",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Blinds, shutters, curtains and garage doors. Starts with the room's. Drag to change the order the panel shows them in."
+            }
+          },
+          "switches": {
+            "name": "Switches",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Switches, input booleans and fans without speed control. Starts with the room's. Drag to change the order the panel shows them in."
+            }
+          },
+          "scenes": {
+            "name": "Scenes",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Scenes and scripts. Starts with the room's. Drag to change the order the panel shows them in."
+            }
+          },
+          "sensors": {
+            "name": "Sensors",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Sensors to show, read only. A room's sensors aren't shown unless you pick them here. Drag to change the order the panel shows them in."
+            }
+          }
         }
       },
       "room_no_area": {
         "title": "The panel's room",
-        "description": "The panel isn't in an area yet, so it shows nothing. Put it in one on its device page: it then shows the lights, switches, fans, scenes, scripts, climate and covers there.",
-        "data": {
-          "sensors": "Add sensors"
-        },
-        "data_description": {
-          "sensors": "Sensors to show too, read only: a room's sensors aren't shown unless you pick them here."
+        "description": "The panel isn't in an area yet. Put it in one on its device page, and the area's lights, switches, fans, scenes, scripts, climate and covers appear here and on the panel. Meanwhile it shows what you pick below.",
+        "sections": {
+          "lights": {
+            "name": "Lights",
+            "data": {
+              "entities": "On the panel, in this order",
+              "all_lights": "Add an 'All lights' item"
+            },
+            "data_description": {
+              "entities": "Lights to show. Drag to change the order the panel shows them in.",
+              "all_lights": "First on the panel, it turns all these lights on and off together and dims them. Only with two or more lights."
+            }
+          },
+          "climate": {
+            "name": "Climate",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Thermostats and air conditioners. Drag to change the order the panel shows them in."
+            }
+          },
+          "covers": {
+            "name": "Covers",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Blinds, shutters, curtains and garage doors. Drag to change the order the panel shows them in."
+            }
+          },
+          "switches": {
+            "name": "Switches",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Switches, input booleans and fans without speed control. Drag to change the order the panel shows them in."
+            }
+          },
+          "scenes": {
+            "name": "Scenes",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Scenes and scripts. Drag to change the order the panel shows them in."
+            }
+          },
+          "sensors": {
+            "name": "Sensors",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Sensors to show, read only. A room's sensors aren't shown unless you pick them here. Drag to change the order the panel shows them in."
+            }
+          }
         }
       },
       "manual": {
         "title": "Pick the entities",
-        "description": "The panel shows these, grouped by kind: lights, climate, covers, switches, scenes and sensors. With two or more lights it adds an 'All lights' item.",
-        "data": {
-          "entities": "Entities"
-        },
-        "data_description": {
-          "entities": "Lights, switches, input booleans, fans without speed control, scenes, scripts, climate, covers and sensors. At most 48."
+        "description": "The panel shows these, in this order, kind by kind, under the panel's name. At most 48.",
+        "sections": {
+          "lights": {
+            "name": "Lights",
+            "data": {
+              "entities": "On the panel, in this order",
+              "all_lights": "Add an 'All lights' item"
+            },
+            "data_description": {
+              "entities": "Lights to show. Drag to change the order the panel shows them in.",
+              "all_lights": "First on the panel, it turns all these lights on and off together and dims them. Only with two or more lights."
+            }
+          },
+          "climate": {
+            "name": "Climate",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Thermostats and air conditioners. Drag to change the order the panel shows them in."
+            }
+          },
+          "covers": {
+            "name": "Covers",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Blinds, shutters, curtains and garage doors. Drag to change the order the panel shows them in."
+            }
+          },
+          "switches": {
+            "name": "Switches",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Switches, input booleans and fans without speed control. Drag to change the order the panel shows them in."
+            }
+          },
+          "scenes": {
+            "name": "Scenes",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Scenes and scripts. Drag to change the order the panel shows them in."
+            }
+          },
+          "sensors": {
+            "name": "Sensors",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Sensors to show, read only. A room's sensors aren't shown unless you pick them here. Drag to change the order the panel shows them in."
+            }
+          }
         }
       }
     }

@@ -48,9 +48,17 @@ async def test_diagnostics(
     assert "t" not in result["settings"]
     assert result["room"] == {
         "mode": "room",
-        "excluded": 0,
-        "sensors": 0,
-        "entities": 0,
+        "sections": {
+            "lights": 0,
+            "climate": 0,
+            "covers": 0,
+            "switches": 0,
+            "scenes": 0,
+            "sensors": 0,
+        },
+        "all_lights": False,
+        "saved_for_area": False,
+        "removed": 0,
         "items": {},
         "waiting_for_state": 0,
         "left_out": 0,
