@@ -20,15 +20,16 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 
 from .const import (
-    CONF_ENTITIES,
-    CONF_EXCLUDE,
+    CONF_ALL_LIGHTS,
+    CONF_AREA,
     CONF_KEY,
     CONF_MODE,
     CONF_PANEL_ID,
-    CONF_SENSORS,
+    CONF_REMOVED,
     MODE_ROOM,
 )
 from .coordinator import NestoConfigEntry
+from .room import SECTIONS
 
 TO_REDACT = {CONF_HOST, CONF_KEY, CONF_PANEL_ID}
 
@@ -76,9 +77,11 @@ async def async_get_config_entry_diagnostics(
         "sensors": sorted(coordinator.data.sensors),
         "room": {
             "mode": options.get(CONF_MODE, MODE_ROOM),
-            "excluded": len(options.get(CONF_EXCLUDE, [])),
-            "sensors": len(options.get(CONF_SENSORS, [])),
-            "entities": len(options.get(CONF_ENTITIES, [])),
+            # How many entities each section lists, not which.
+            "sections": {name: len(options.get(name, [])) for name in SECTIONS},
+            "all_lights": options.get(CONF_ALL_LIGHTS, False),
+            "saved_for_area": CONF_AREA in options,
+            "removed": len(options.get(CONF_REMOVED, [])),
             "items": (
                 dict(Counter(item.kind for item in layout.items))
                 if layout is not None

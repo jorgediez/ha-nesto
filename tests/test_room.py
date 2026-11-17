@@ -13,10 +13,10 @@ from pytest_homeassistant.common import MockConfigEntry, async_mock_service
 from custom_components.nesto import room
 from custom_components.nesto.client import CannotConnect
 from custom_components.nesto.const import (
-    CONF_ENTITIES,
-    CONF_EXCLUDE,
+    CONF_ALL_LIGHTS,
+    CONF_AREA,
     CONF_MODE,
-    CONF_SENSORS,
+    CONF_REMOVED,
     DOMAIN,
     MODE_MANUAL,
     MODE_ROOM,
@@ -138,7 +138,10 @@ async def in_room(
     init_integration: MockConfigEntry,
     clients: ClientFactory,
 ) -> MockConfigEntry:
-    """The panel, set up, then moved into the living room."""
+    """The panel, set up with an "All lights" item, then moved into the room."""
+    hass.config_entries.async_update_entry(
+        init_integration, options={CONF_ALL_LIGHTS: True}
+    )
     clients.last.sent.clear()
     await put_panel_in(hass, area.id)
     return init_integration
@@ -246,23 +249,56 @@ async def test_renaming_the_area_renames_the_title(
     assert last(clients.last, "layout")["title"] == "Lounge"
 
 
+async def setup_with(
+    hass: HomeAssistant, config_entry: MockConfigEntry, options: dict[str, Any]
+) -> None:
+    config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(config_entry, options=options)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_no_all_lights_item_unless_asked(
+    hass: HomeAssistant, area: ar.AreaEntry, config_entry: MockConfigEntry, clients
+) -> None:
+    await setup_with(hass, config_entry, {})
+    await put_panel_in(hass, area.id)
+    names = [i["name"] for i in last(clients.last, "layout")["items"]]
+    assert names[:2] == ["Ceiling", "Reading lamp"]
+    assert "All lights" not in names
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
 async def test_room_options(
     hass: HomeAssistant, area: ar.AreaEntry, config_entry: MockConfigEntry, clients
 ) -> None:
-    config_entry.add_to_hass(hass)
-    hass.config_entries.async_update_entry(
+    await setup_with(
+        hass,
         config_entry,
-        options={
+        {
             CONF_MODE: MODE_ROOM,
-            CONF_EXCLUDE: ["script.bedtime"],
-            CONF_SENSORS: ["sensor.co2"],
+            CONF_AREA: area.id,
+            "lights": ["light.lamp", "light.ceiling"],
+            "switches": ["switch.fan_plug"],
+            "sensors": ["sensor.co2"],
+            CONF_REMOVED: ["script.bedtime"],
         },
     )
-    assert await hass.config_entries.async_setup(config_entry.entry_id)
-    await hass.async_block_till_done()
     await put_panel_in(hass, area.id)
-    names = items_by_name(last(clients.last, "layout"))
-    assert "Bedtime" not in names
+    layout = last(clients.last, "layout")
+    # The user's order within each kind; the area's other entities after
+    # theirs, by name; the one taken off, off.
+    assert [i["name"] for i in layout["items"]] == [
+        "Reading lamp",
+        "Ceiling",
+        "Radiator",
+        "Window blind",
+        "Fan plug",
+        "Ceiling fan",
+        "Film night",
+        "CO2",
+    ]
+    names = items_by_name(layout)
     assert names["CO2"] == {
         "key": names["CO2"]["key"],
         "kind": "sensor",
@@ -270,6 +306,39 @@ async def test_room_options(
         "icon": "sensor",
         "features": {"unit": "ppm"},
     }
+
+    # A switch added to the room later comes after the listed ones.
+    register(hass, "switch.aaa", area.id)
+    hass.states.async_set("switch.aaa", "on", {"friendly_name": "Aaa"})
+    await hass.async_block_till_done()
+    switches = [
+        i["name"]
+        for i in last(clients.last, "layout")["items"]
+        if i["kind"] == "switch"
+    ]
+    assert switches == ["Fan plug", "Aaa", "Ceiling fan"]
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+async def test_lists_saved_for_another_room(
+    hass: HomeAssistant, area: ar.AreaEntry, config_entry: MockConfigEntry, clients
+) -> None:
+    await setup_with(
+        hass,
+        config_entry,
+        {
+            CONF_MODE: MODE_ROOM,
+            CONF_AREA: "kitchen",
+            "lights": ["light.lamp"],
+            "sensors": ["sensor.co2"],
+            CONF_REMOVED: ["light.ceiling"],
+        },
+    )
+    await put_panel_in(hass, area.id)
+    names = [i["name"] for i in last(clients.last, "layout")["items"]]
+    # The living room's own entities, as if nothing were saved; the sensors stay.
+    assert names[:2] == ["Ceiling", "Reading lamp"]
+    assert names[-1] == "CO2"
     await hass.config_entries.async_unload(config_entry.entry_id)
 
 
@@ -277,26 +346,34 @@ async def test_manual_mode(
     hass: HomeAssistant, area: ar.AreaEntry, config_entry: MockConfigEntry, clients
 ) -> None:
     hass.states.async_set("media_player.tv", "on")
-    config_entry.add_to_hass(hass)
-    hass.config_entries.async_update_entry(
+    hass.states.async_set("light.desk", "on", {"friendly_name": "Desk"})
+    await setup_with(
+        hass,
         config_entry,
-        options={
+        {
             CONF_MODE: MODE_MANUAL,
-            CONF_ENTITIES: [
-                "sensor.co2",
+            CONF_ALL_LIGHTS: True,
+            "lights": ["light.lamp", "light.desk"],
+            "switches": [
                 "switch.kitchen",
-                "light.lamp",
                 "media_player.tv",  # no kind for it
                 "fan.speeds",  # nor for a fan with speeds
+                "light.ceiling",  # in the wrong list, it still goes with the lights
             ],
+            "sensors": ["sensor.co2"],
         },
     )
-    assert await hass.config_entries.async_setup(config_entry.entry_id)
-    await hass.async_block_till_done()
     await put_panel_in(hass, area.id)  # manual mode ignores the area
     layout = last(clients.last, "layout")
     assert layout["title"] == TITLE
-    assert [i["name"] for i in layout["items"]] == ["Reading lamp", "kitchen", "CO2"]
+    assert [i["name"] for i in layout["items"]] == [
+        "All lights",
+        "Reading lamp",
+        "Desk",
+        "Living room Ceiling",
+        "kitchen",
+        "CO2",
+    ]
     await hass.config_entries.async_unload(config_entry.entry_id)
 
 
@@ -311,7 +388,7 @@ async def test_the_limits(
         hass.states.async_set(entity_id, "off", {"friendly_name": "x" * 80})
     config_entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(
-        config_entry, options={CONF_MODE: MODE_MANUAL, CONF_ENTITIES: switches}
+        config_entry, options={CONF_MODE: MODE_MANUAL, "switches": switches}
     )
     caplog.set_level(logging.WARNING)
     assert await hass.config_entries.async_setup(config_entry.entry_id)
@@ -678,7 +755,7 @@ async def test_intent_for_a_sensor(
 ) -> None:
     config_entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(
-        config_entry, options={CONF_MODE: MODE_MANUAL, CONF_ENTITIES: ["sensor.co2"]}
+        config_entry, options={CONF_MODE: MODE_MANUAL, "sensors": ["sensor.co2"]}
     )
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()

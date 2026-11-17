@@ -29,8 +29,8 @@ Tested with: the simulator from nesto-firmware. Real thermostats follow.
 In the first release:
 
 - Discovery, and pairing with the code the panel shows.
-- Room mode (the panel's area, minus anything you exclude) or manual mode
-  (the entities you pick).
+- Room mode (the panel's area, following it as it changes) or manual mode
+  (the entities you pick), either way in the order you choose.
 - The panel's display as a light, its standby screen as a select, and its
   settings as configuration entities.
 - Its temperature, humidity, light and motion sensors.
@@ -78,21 +78,34 @@ In the area, the panel shows the lights, switches, input booleans, fans
 without speed control, scenes, scripts, climate entities and covers: those
 put in the area, and those whose device is in it, unless the entity was put
 in another area. Hidden entities, and configuration and diagnostic ones, are
-left out. Entities you add to the area later appear on the panel by
-themselves. The area's name is the panel's title, and dropped from the front
+left out. The area's name is the panel's title, and dropped from the front
 of the entities' names ("Living room lamp" shows as "Lamp").
 
-The integration's **Configure** options change that:
+The integration's **Configure** options choose between:
 
-- **The panel's room:** leave out some of the area's entities, and add
-  sensors, which a room doesn't show unless you pick them.
-- **Entities I pick:** the panel shows the entities you choose, whatever their
-  area, under the entry's name.
+- **The panel's room:** the area's entities, which you can reorder, take off,
+  or add to.
+- **Entities I pick:** only the entities you choose, whatever their area,
+  under the entry's name.
 
-Either way, the panel groups what it shows: an **All lights** item when there
-are two or more lights, then lights, climate, covers, switches, scenes and
-sensors, each sorted by name. It shows 48 items at most; the log says which
-were left out. Saving the options reconnects the panel, which takes a second.
+Either way, the next form has a section per kind: lights, climate, covers,
+switches (with input booleans and fans), scenes (with scripts) and sensors.
+The panel shows them in that order, and within each section in the order
+you drag them into. In the panel's room, the sections start with the area's
+entities, by name, except sensors, which a room doesn't show unless you add
+them; with entities you pick, they start empty.
+
+The panel's room keeps following the area: an entity added to it later
+appears after the ones in your list, by name, and one you took off stays
+off. If the panel moves to another area, it shows that area's entities until
+you save the options again; the sensors you added stay.
+
+The Lights section can add an **All lights** item, first on the panel, which
+turns all of them on and off together and dims them. It's off unless you
+tick it, and needs two or more lights.
+
+The panel shows 48 items at most; the log says which were left out. Saving
+the options reconnects the panel, which takes a second.
 
 What each kind can do on the panel:
 
@@ -298,7 +311,7 @@ restart.
 
 Nothing goes over the internet: the panel and Home Assistant talk only on your
 network. Anyone at the panel can control what it shows, as with a light
-switch on the wall: leave out of its room anything that shouldn't be one
+switch on the wall: take off its room anything that shouldn't be one
 press away, such as a lock or an alarm script. Home Assistant keeps the
 panel's address and the pairing key in its config entry, and the panel's
 settings in its storage, deleted when you remove the panel. The key works

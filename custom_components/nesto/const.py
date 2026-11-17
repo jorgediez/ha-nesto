@@ -13,9 +13,11 @@ CONF_PANEL_ID: Final = "panel_id"
 CONF_MODE: Final = "mode"
 MODE_ROOM: Final = "room"  # the area the panel's device is in
 MODE_MANUAL: Final = "manual"  # the entities the user picks
-CONF_EXCLUDE: Final = "exclude"  # room mode: entities to leave out
-CONF_SENSORS: Final = "sensors"  # room mode: sensors to add
-CONF_ENTITIES: Final = "entities"  # manual mode
+# Then one ordered list of entities per section (room.SECTIONS), in both modes.
+CONF_ENTITIES: Final = "entities"  # a section's entities, in the options form
+CONF_ALL_LIGHTS: Final = "all_lights"  # add an "All lights" item
+CONF_AREA: Final = "area_id"  # room mode: the area the lists were saved for
+CONF_REMOVED: Final = "removed"  # room mode: the area's entities taken off
 
 DEFAULT_PORT: Final = 6170
 DEFAULT_NAME: Final = "Nesto Panel"
