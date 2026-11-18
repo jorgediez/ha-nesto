@@ -5,10 +5,6 @@
 [![Tests](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml/badge.svg)](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Work in progress.** Everything planned for the first release is in:
-> pairing, the room, the display and settings, sensors, presses and
-> notifications. It hasn't been released yet.
-
 Turns a Nest Learning Thermostat (2nd generation), running the
 [Nesto firmware](https://github.com/jorgediez/nesto-firmware), into a room
 panel for Home Assistant. Turn the ring and press to control the lights,
@@ -16,17 +12,23 @@ climate, covers, switches and scenes of a room; the panel also shows Home
 Assistant's notifications, a clock while it rests, and reports its own
 temperature, humidity, light and motion sensors.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jorgediez/nesto-firmware/v0.1.0/docs/images/home.png" width="160" alt="The panel's home screen, showing a light">
+  <img src="https://raw.githubusercontent.com/jorgediez/nesto-firmware/v0.1.0/docs/images/climate.png" width="160" alt="A radiator's target temperature">
+  <img src="https://raw.githubusercontent.com/jorgediez/nesto-firmware/v0.1.0/docs/images/notification.png" width="160" alt="A notification with buttons">
+  <img src="https://raw.githubusercontent.com/jorgediez/nesto-firmware/v0.1.0/docs/images/clock-analog.png" width="160" alt="The standby clock">
+</p>
+
 Everything is local. The panel announces itself on the network, pairs once
 with a code it shows on screen, and from then on keeps one encrypted
 connection with Home Assistant, which pushes what the panel shows and carries
 out what the user does on it. The panel holds no Home Assistant token and
 never talks to the internet.
 
-Tested with: the simulator from nesto-firmware. Real thermostats follow.
+Tested on a Nest Learning Thermostat (2nd generation) with firmware 0.1.0,
+on its EU base and a USB stand, and against the firmware's simulator.
 
 ## Features
-
-In the first release:
 
 - Discovery, and pairing with the code the panel shows.
 - Room mode (the panel's area, following it as it changes) or manual mode
@@ -40,7 +42,9 @@ In the first release:
 ## Installation
 
 Requires Home Assistant 2026.11 or newer, and a panel running the Nesto
-firmware.
+firmware, 0.1.0 or newer: download a
+[release](https://github.com/jorgediez/nesto-firmware/releases) and follow its
+[install guide](https://github.com/jorgediez/nesto-firmware/blob/main/docs/INSTALL.md).
 
 Until the integration is in the Marketplace's default list, add it from its
 link: in *Settings → Marketplace*, choose **Add from link** (it needs a GitHub
@@ -55,7 +59,7 @@ A panel on the same network shows up under *Settings → Devices & services →
 Discovered*. Choose **Add**, and the panel shows a six-digit code: type it in
 Home Assistant. If discovery doesn't reach your panel (another VLAN, say), add
 it with **Add integration → Nesto Panel** and the address and port the
-panel shows under *Settings → About*.
+panel shows under *Settings → Technical info* (Network, and Nesto's Port).
 
 A panel pairs with one Home Assistant at a time. A panel already paired with
 another one refuses: choose *Settings → Pair* on the panel first, then add it.
@@ -299,6 +303,48 @@ id, and which entities and areas it shows are left out.
   that it isn't hidden, and that it's of a kind the panel shows. Sensors only
   appear when picked in the options.
 
+## Supported devices
+
+The Nest Learning Thermostat (2nd generation), display model Display-2.x,
+running the [Nesto firmware](https://github.com/jorgediez/nesto-firmware) 0.1.0 or newer, on its base or on a USB
+stand. Off its base it has no sensors. Other Nest models, and thermostats
+with the stock Nest software, aren't supported: Home Assistant's own Google
+Nest integration is for those.
+
+## How data updates
+
+The panel and Home Assistant keep one connection open. Home Assistant sends
+the panel each change of the entities it shows as it happens; the panel
+sends its sensor readings every 30 seconds, sooner when motion or someone
+near changes, and presses and notification answers as they happen. The
+diagnostic sensors (battery, memory, Wi-Fi signal and the like) are asked
+for every five minutes. A dropped connection is retried, every minute at
+most, and the panel gets everything again when it's back.
+
+## Use cases
+
+- A light switch with a dial by the door: the room's lights, dimmed with the
+  ring, and the heating's target temperature.
+- A bedside panel: a clock while it rests, a scene to turn everything off, and
+  a double press, which doesn't wake it, for an automation.
+- A doorbell or a leak alarm that you can answer from the wall, with buttons.
+- A room's temperature, humidity and motion for automations, from a
+  thermostat that would otherwise be thrown away.
+
+## Known limitations
+
+- One Home Assistant per panel, and one panel per entry.
+- The panel shows 48 items at most, and only the kinds in *Choosing the
+  room*: no media players, locks or fans with speeds yet.
+- Notifications live in the panel's memory: a restart loses them, and Home
+  Assistant doesn't send them again.
+- Not yet: a picture carousel while the panel rests, languages other than
+  English on the panel, rebooting it from Home Assistant, and updating its
+  firmware from Home Assistant (it's installed over SSH).
+- The light level is the sensor's raw value, not lux.
+- Tested on one thermostat; running on a wall's heating wires, rather than a
+  USB stand, is untested on the firmware's side.
+
 ## Removal
 
 Delete the panel's entry in *Settings → Devices & services*. If the panel is
@@ -324,9 +370,9 @@ the address and the panel id.
 Home Assistant writes to the panel only what the panel exists to show: when a
 connection opens it sends the time, the panel's settings, the room's layout
 and the entities' states, and afterwards whatever changes. The panel keeps no
-settings of its own to overwrite: its menu only pairs, forgets Home Assistant
-and shows information, and the settings Home Assistant sends are the
-firmware's defaults until you change one. Anything else, such as a notification, is sent only when
+settings of its own to overwrite: its menu only pairs, forgets Home Assistant,
+joins Wi-Fi networks and shows information, and the settings Home Assistant
+sends are the firmware's defaults until you change one. Anything else, such as a notification, is sent only when
 you call an action or change an entity.
 
 ## Disclaimer
