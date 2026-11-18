@@ -46,20 +46,34 @@ firmware, 0.1.0 or newer: download a
 [release](https://github.com/jorgediez/nesto-firmware/releases) and follow its
 [install guide](https://github.com/jorgediez/nesto-firmware/blob/main/docs/INSTALL.md).
 
-Until the integration is in the Marketplace's default list, add it from its
-link: in *Settings → Marketplace*, choose **Add from link** (it needs a GitHub
-connection), enter `https://github.com/jorgediez/ha-nesto`, then **Install**.
+### Marketplace (recommended)
 
-Manually: copy `custom_components/nesto` into your Home Assistant's
-`custom_components` folder, and restart.
+[![Open your Home Assistant instance and open a repository inside the Marketplace.][my-marketplace-badge]][my-marketplace-url]
+
+1. Use the button above. Until the integration is in the Marketplace's
+   default list, you can also add it from its link: in *Settings →
+   Marketplace*, choose **Add from link** (it needs a GitHub connection) and
+   enter `https://github.com/jorgediez/ha-nesto`.
+2. Select **Install**. If a restart is needed, Home Assistant offers one.
+
+### Manual
+
+Copy `custom_components/nesto` into your Home Assistant's `custom_components`
+folder, and restart.
 
 ## Configuration
 
 A panel on the same network shows up under *Settings → Devices & services →
 Discovered*. Choose **Add**, and the panel shows a six-digit code: type it in
-Home Assistant. If discovery doesn't reach your panel (another VLAN, say), add
-it with **Add integration → Nesto Panel** and the address and port the
-panel shows under *Settings → Technical info* (Network, and Nesto's Port).
+Home Assistant.
+
+If discovery doesn't reach your panel (another VLAN, say), add it by address:
+
+[![Open your Home Assistant instance and start setting up Nesto Panel.][my-setup-badge]][my-setup-url]
+
+Or *Settings → Devices & services → Add integration → Nesto Panel*. Enter the
+address and port the panel shows under *Settings → Technical info* (Network,
+and Nesto's Port), then the code.
 
 A panel pairs with one Home Assistant at a time. A panel already paired with
 another one refuses: choose *Settings → Pair* on the panel first, then add it.
@@ -386,3 +400,8 @@ software is at your own risk.
 
 [Apache License 2.0](LICENSE). The protocol module is ported from
 nesto-firmware's reference implementation, by the same author.
+
+[my-marketplace-badge]: https://my.home-assistant.io/badges/marketplace_repository.svg
+[my-marketplace-url]: https://my.home-assistant.io/redirect/marketplace_repository/?owner=jorgediez&repository=ha-nesto&category=integration
+[my-setup-badge]: https://my.home-assistant.io/badges/config_flow_start.svg
+[my-setup-url]: https://my.home-assistant.io/redirect/config_flow_start/?domain=nesto
