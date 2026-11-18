@@ -21,7 +21,7 @@ body:
     id: firmware
     attributes:
       label: Panel firmware version
-      description: Shown in the panel's Settings → About.
+      description: Shown in the panel's Settings → Technical info → Nesto → Version.
     validations:
       required: true
   - type: input

@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Add a Nesto Panel",
-        "description": "Enter the panel's address. It's shown on the panel under Settings → About.",
+        "description": "Enter the panel's address. It's shown on the panel under Settings → Technical info → Network.",
         "data": {
           "host": "Host",
           "port": "Port"
