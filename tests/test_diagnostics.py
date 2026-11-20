@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from pytest_homeassistant.common import MockConfigEntry
 from pytest_homeassistant.components.diagnostics import (
     get_diagnostics_for_config_entry,
@@ -11,6 +12,7 @@ from pytest_homeassistant.components.diagnostics import (
 from pytest_homeassistant.typing import ClientSessionGenerator
 
 from custom_components.nesto.client import CannotConnect
+from custom_components.nesto.coordinator import NotPaired, WrongPanel
 from homeassistant.core import HomeAssistant
 
 from .common import HOST, KEY, PANEL_ID, ClientFactory
@@ -108,3 +110,51 @@ async def test_diagnostics_with_status_and_sensors(
     assert "ip" not in result["status"]
     assert result["sensors"] == ["temperature_c"]
     assert result["temperature_offset"] == 0.0
+
+
+@pytest.mark.parametrize(
+    ("error", "shown"),
+    [
+        # How the client words a failed connection, with the socket's error.
+        (
+            CannotConnect(
+                f"{HOST}:6170: [Errno 111] Connect call failed ('{HOST}', 6170)"
+            ),
+            "CannotConnect: **REDACTED**:6170: [Errno 111] Connect call failed "
+            "('**REDACTED**', 6170)",
+        ),
+        # A panel added by name: the socket's error names its IP address.
+        (
+            CannotConnect("[Errno 113] Connect call failed ('192.168.1.61', 6170)"),
+            "CannotConnect: [Errno 113] Connect call failed ('**REDACTED**', 6170)",
+        ),
+        (
+            CannotConnect("Connect call failed ('fe80::1%eth0', 6170, 0, 2)"),
+            "CannotConnect: Connect call failed ('**REDACTED**%eth0', 6170, 0, 2)",
+        ),
+        # Another panel at the saved address.
+        (
+            WrongPanel(f"{HOST} is panel 0A1B2C3D4E5F now"),
+            "WrongPanel: **REDACTED** is panel **REDACTED** now",
+        ),
+        (
+            NotPaired(f"panel {PANEL_ID} holds no pairing key"),
+            "NotPaired: panel **REDACTED** holds no pairing key",
+        ),
+        # Nothing to hide: as it was.
+        (
+            CannotConnect("timed out after 10 s at 12:30"),
+            "CannotConnect: timed out after 10 s at 12:30",
+        ),
+    ],
+)
+async def test_the_last_error_hides_addresses_and_panel_ids(
+    hass: HomeAssistant,
+    hass_client: ClientSessionGenerator,
+    init_integration: MockConfigEntry,
+    error: Exception,
+    shown: str,
+) -> None:
+    init_integration.runtime_data.last_error = error
+    result = await get_diagnostics_for_config_entry(hass, hass_client, init_integration)
+    assert result["connection"]["last_error"] == shown
