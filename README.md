@@ -1,6 +1,7 @@
 # Nesto Panel for Home Assistant
 
-[![Marketplace](https://img.shields.io/badge/Marketplace-Custom-41BDF5.svg?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/integrations/marketplace/)
+[![Marketplace](https://img.shields.io/badge/Marketplace-Default-41BDF5.svg?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/integrations/marketplace/)
+[![Release](https://img.shields.io/github/v/release/jorgediez/ha-nesto)](https://github.com/jorgediez/ha-nesto/releases)
 [![Validate](https://github.com/jorgediez/ha-nesto/actions/workflows/validate.yml/badge.svg)](https://github.com/jorgediez/ha-nesto/actions/workflows/validate.yml)
 [![Tests](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml/badge.svg)](https://github.com/jorgediez/ha-nesto/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -50,11 +51,10 @@ firmware, 0.1.0 or newer: download a
 
 [![Open your Home Assistant instance and open a repository inside the Marketplace.][my-marketplace-badge]][my-marketplace-url]
 
-1. Use the button above. Until the integration is in the Marketplace's
-   default list, you can also add it from its link: in *Settings →
-   Marketplace*, choose **Add from link** (it needs a GitHub connection) and
-   enter `https://github.com/jorgediez/ha-nesto`.
-2. Select **Install**. If a restart is needed, Home Assistant offers one.
+1. In Home Assistant, go to *Settings → Marketplace*, search for **Nesto
+   Panel** and open it, or use the button above.
+2. Select **Install**. The setup opens once it's installed; if a restart is
+   needed, Home Assistant offers one.
 
 ### Manual
 
