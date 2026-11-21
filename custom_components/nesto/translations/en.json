@@ -440,6 +440,33 @@
     "empty_message": {
       "message": "The message is empty."
     },
+    "firmware_bad_signature": {
+      "message": "{name} refused the firmware: the release key didn't sign it."
+    },
+    "firmware_download": {
+      "message": "Couldn't download the firmware for {name}: {error}"
+    },
+    "firmware_downgrade": {
+      "message": "{name} refused the firmware: it's older than the one it runs. An older version goes in over SSH."
+    },
+    "firmware_no_restart": {
+      "message": "{name} didn't come back after putting Nesto {version} in place. If it doesn't run it within 5 minutes, it goes back to the version it had."
+    },
+    "firmware_no_space": {
+      "message": "{name} hasn't room for the firmware."
+    },
+    "firmware_none": {
+      "message": "There's no firmware update {name} can install from here."
+    },
+    "firmware_rolled_back": {
+      "message": "{name} went back to Nesto {running}: Nesto {version} didn't start, or didn't reach Home Assistant."
+    },
+    "firmware_too_large": {
+      "message": "The firmware is too large for {name}."
+    },
+    "firmware_unsupported": {
+      "message": "{name} doesn't take firmware updates from Home Assistant, or not this one: install it over SSH."
+    },
     "panel_not_loaded": {
       "message": "{name} isn't set up; check its entry."
     },
