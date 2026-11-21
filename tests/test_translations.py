@@ -24,9 +24,14 @@ def _sources() -> str:
 
 def test_every_raised_error_has_a_message():
     """A missing message shows the bare translation key to the user."""
+    sources = _sources()
     raised = set(
-        re.findall(r'translation_domain=DOMAIN,\s*translation_key="(\w+)"', _sources())
+        re.findall(r'translation_domain=DOMAIN,\s*translation_key="(\w+)"', sources)
     )
+    # update.py names its errors through a helper, and the panel's refusals
+    # through a table.
+    raised |= set(re.findall(r'self\._error\(\s*"(\w+)"', sources))
+    raised |= set(re.findall(r'": "(firmware_\w+)",', sources))
     assert raised, "the scan found no translated errors"
     assert raised == set(EN["exceptions"])
 

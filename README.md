@@ -167,6 +167,8 @@ entity's last known state again.
   *Notifications*).
 - **Identify** (button, under configuration): the panel wakes, pulses its
   backlight and beeps three times, so you can tell which one it is.
+- **Firmware** (update, under configuration): the Nesto version the panel
+  runs, and the latest release (see *Firmware updates*).
 - Under diagnostic: **Battery voltage**, **Last restart** and **Base
   connected**; and, disabled until you enable them, **Supply voltage**, **USB
   voltage**, **Free memory**, **Wi-Fi signal** (dBm), **IP address** and
@@ -225,6 +227,25 @@ brackets), so a panel nobody has configured behaves as it always has.
 | Press click | A click on pressing the screen (off). |
 | Notification sounds | Notifications may beep (on). |
 | Temperature offset | Added to the temperature reading, −10 to +10 °C (0). The head unit warms itself, so its reading runs high: set this to the difference from a thermometer next to it. Home Assistant's own, never sent to the panel; only on a panel with a temperature sensor. |
+
+## Firmware updates
+
+The panel's **Firmware** entity offers each new
+[Nesto release](https://github.com/jorgediez/nesto-firmware/releases), with its
+notes, in *Settings → Updates* like any other update. Installing it downloads
+the release's program and sends it to the panel, which shows an Updating
+screen with the progress, then restarts with it: about a minute in all.
+
+- The panel installs only a program signed with Nesto's release key, so what
+  Home Assistant downloads can't be swapped for something else on the way. It
+  refuses an older version too.
+- If the new version doesn't start, or doesn't reach Home Assistant within
+  five minutes, the panel goes back to the one it had, and the update fails
+  with a message saying so.
+- Firmware 0.2.0 and newer take updates this way. On an older one, the entity
+  shows the release but has no Install button: update that one over SSH, as
+  the [install guide](https://github.com/jorgediez/nesto-firmware/blob/main/docs/INSTALL.md#updating)
+  describes. An older version also goes in over SSH.
 
 ## Notifications
 
@@ -333,7 +354,8 @@ sends its sensor readings every 30 seconds, sooner when motion or someone
 near changes, and presses and notification answers as they happen. The
 diagnostic sensors (battery, memory, Wi-Fi signal and the like) are asked
 for every five minutes. A dropped connection is retried, every minute at
-most, and the panel gets everything again when it's back.
+most, and the panel gets everything again when it's back. Home Assistant
+checks GitHub for a new firmware release when it starts, then every 12 hours.
 
 ## Use cases
 
@@ -353,8 +375,7 @@ most, and the panel gets everything again when it's back.
 - Notifications live in the panel's memory: a restart loses them, and Home
   Assistant doesn't send them again.
 - Not yet: a picture carousel while the panel rests, languages other than
-  English on the panel, rebooting it from Home Assistant, and updating its
-  firmware from Home Assistant (it's installed over SSH).
+  English on the panel, and rebooting it from Home Assistant.
 - The light level is the sensor's raw value, not lux.
 - Tested on one thermostat; running on a wall's heating wires, rather than a
   USB stand, is untested on the firmware's side.
@@ -369,8 +390,12 @@ restart.
 
 ## Privacy
 
-Nothing goes over the internet: the panel and Home Assistant talk only on your
-network. Anyone at the panel can control what it shows, as with a light
+The panel and Home Assistant talk only on your network. The one thing that
+goes over the internet is the firmware check: Home Assistant asks GitHub for
+Nesto's latest release when it starts and every 12 hours, and downloads a
+release when you install it. Nothing about you or your panels goes with it;
+GitHub sees your address, as for any download. Disabling the panels'
+**Firmware** entities stops the check. Anyone at the panel can control what it shows, as with a light
 switch on the wall: take off its room anything that shouldn't be one
 press away, such as a lock or an alarm script. Home Assistant keeps the
 panel's address and the pairing key in its config entry, and the panel's

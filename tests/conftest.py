@@ -12,12 +12,25 @@ from unittest.mock import patch
 
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.test_util.aiohttp import AiohttpClientMocker
 
-from custom_components.nesto.const import CONF_KEY, CONF_PANEL_ID, DOMAIN
+from custom_components.nesto.const import (
+    CONF_KEY,
+    CONF_PANEL_ID,
+    DOMAIN,
+    FIRMWARE_RELEASES_URL,
+)
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 
 from .common import HOST, KEY, PANEL_ID, PORT, TITLE, ClientFactory
+
+
+@pytest.fixture(autouse=True)
+def github(aioclient_mock: AiohttpClientMocker) -> AiohttpClientMocker:
+    """Answer the firmware check: no release, unless a test registers one."""
+    aioclient_mock.get(FIRMWARE_RELEASES_URL, status=404)
+    return aioclient_mock
 
 
 @pytest.fixture

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Final
 
 DOMAIN: Final = "nesto"
@@ -32,6 +33,21 @@ RECONNECT_DELAYS: Final = (1, 2, 5, 10, 30, 60)
 UNPAIR_TIMEOUT: Final = 5.0
 # How long a panel's intent waits for its service call (PROTOCOL.md section 11).
 INTENT_TIMEOUT: Final = 10.0
+
+# Firmware updates (PROTOCOL.md section 19, firmware.py, update.py).
+FIRMWARE_RELEASES_URL: Final = (
+    "https://api.github.com/repos/jorgediez/nesto-firmware/releases/latest"
+)
+FIRMWARE_CHECK_INTERVAL: Final = timedelta(hours=12)
+# Seconds for asking GitHub, and for downloading a program.
+FIRMWARE_TIMEOUT: Final = 30.0
+FIRMWARE_DOWNLOAD_TIMEOUT: Final = 300.0
+# The largest program a panel takes, and the pieces it's sent in.
+FIRMWARE_MAX_SIZE: Final = 16 * 1024 * 1024
+FIRMWARE_CHUNK: Final = 64 * 1024
+# How long, after the panel puts an update in place, it has to come back.
+# It goes back to the old program after 5 minutes without Home Assistant.
+FIRMWARE_RESTART_TIMEOUT: Final = 180.0
 
 
 def panel_title(panel_id: str) -> str:
