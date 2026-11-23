@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timedelta
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -25,6 +27,12 @@ from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.util import dt as dt_util
 
 from .common import KEY, PANEL_ID, TITLE, ClientFactory, make_hello
+
+INTEGRATION_VERSION = json.loads(
+    (
+        Path(__file__).parents[1] / "custom_components" / "nesto" / "manifest.json"
+    ).read_text()
+)["version"]
 
 
 @pytest.fixture(autouse=True)
@@ -57,7 +65,7 @@ async def test_setup_synchronises(
     assert ha_info == {
         "t": "ha_info",
         "ha_version": HA_VERSION,
-        "integration_version": "0.1.0",
+        "integration_version": INTEGRATION_VERSION,
     }
     assert layout["title"] == TITLE
     assert layout["items"] == []
