@@ -102,6 +102,14 @@ class NestoFirmwareUpdate(NestoEntity, UpdateEntity):
     def _handle_releases_update(self) -> None:
         self.async_write_ha_state()
 
+    async def async_update(self) -> None:
+        """Check GitHub for a release now, not at the next scheduled check.
+
+        What homeassistant.update_entity runs. The panel pushes its state, so
+        there is nothing to ask it.
+        """
+        await self._releases.async_refresh()
+
     # What runs, and what's out ----------------------------------------------
 
     @property

@@ -211,6 +211,7 @@ async def test_settings_entities(
     assert config == sorted(
         [
             "identify",
+            "restart",
             "firmware",
             "display_brightness",
             "standby_brightness",

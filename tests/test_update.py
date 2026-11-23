@@ -16,6 +16,10 @@ from pytest_homeassistant.typing import WebSocketGenerator
 from custom_components.nesto import coordinator as coordinator_module, update
 from custom_components.nesto.client import CannotConnect, PanelError
 from custom_components.nesto.const import FIRMWARE_RELEASES_URL
+from homeassistant.components.homeassistant import (
+    DOMAIN as HA_DOMAIN,
+    SERVICE_UPDATE_ENTITY,
+)
 from homeassistant.components.update import (
     ATTR_IN_PROGRESS,
     ATTR_INSTALLED_VERSION,
@@ -39,6 +43,7 @@ from homeassistant.const import (
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 
 from .common import ClientFactory, make_hello
@@ -264,6 +269,28 @@ async def test_the_check_keeps_its_last_answer(
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(hours=12, seconds=1))
     await hass.async_block_till_done()
     assert github.call_count == 1  # it asked again
+    current = state(hass, init_integration)
+    assert current.state == STATE_ON
+    assert current.attributes[ATTR_LATEST_VERSION] == "0.2.0"
+
+
+@pytest.mark.usefixtures("takes_updates")
+async def test_update_entity_checks_now(
+    hass: HomeAssistant, init_integration: MockConfigEntry, github: AiohttpClientMocker
+) -> None:
+    """homeassistant.update_entity asks GitHub at once, not in 12 hours."""
+    assert state(hass, init_integration).state == STATE_UNKNOWN
+    github.clear_requests()
+    github.get(FIRMWARE_RELEASES_URL, json=github_release())
+    await async_setup_component(hass, HA_DOMAIN, {})
+    await hass.services.async_call(
+        HA_DOMAIN,
+        SERVICE_UPDATE_ENTITY,
+        {ATTR_ENTITY_ID: firmware_entity(hass, init_integration)},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert github.call_count == 1
     current = state(hass, init_integration)
     assert current.state == STATE_ON
     assert current.attributes[ATTR_LATEST_VERSION] == "0.2.0"
