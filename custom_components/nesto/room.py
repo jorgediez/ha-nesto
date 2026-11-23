@@ -17,7 +17,7 @@ builds, and answers intents with what it returns.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 import logging
 from typing import Any, Final
@@ -62,7 +62,8 @@ MAX_OPTIONS: Final = 32
 
 ALL_LIGHTS_KEY: Final = "all"
 
-# The kind each supported domain becomes; `fan` only without speed control.
+# The kind each supported domain becomes, and the options section it's in. A
+# fan is a `fan` on a panel that draws them (`caps.kinds`), in the switches.
 DOMAIN_KINDS: Final = {
     "light": "light",
     "switch": "switch",
@@ -88,6 +89,8 @@ SECTIONS: Final = {
     "sensors": "sensor",
 }
 SECTION_OF_KIND: Final = {kind: section for section, kind in SECTIONS.items()}
+# Kinds that newer panels draw, and the kind an older one gets instead.
+FALLBACK_KINDS: Final = {"fan": "switch"}
 
 
 def section_domains(section: str) -> list[str]:
@@ -95,7 +98,9 @@ def section_domains(section: str) -> list[str]:
     return sorted(d for d, kind in DOMAIN_KINDS.items() if kind == SECTIONS[section])
 
 
-FAN_SET_SPEED: Final = 1  # FanEntityFeature.SET_SPEED
+# FanEntityFeature.
+FAN_SET_SPEED, FAN_OSCILLATE, FAN_DIRECTION, FAN_PRESET_MODE = 1, 2, 4, 8
+FAN_DIRECTIONS: Final = ("forward", "reverse")
 CLIMATE_TARGET: Final = 1  # ClimateEntityFeature.TARGET_TEMPERATURE
 CLIMATE_RANGE: Final = 2  # ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
 COVER_OPEN, COVER_CLOSE, COVER_POSITION, COVER_STOP = 1, 2, 4, 8
@@ -337,9 +342,17 @@ def _sort_name(hass: HomeAssistant, entity_id: str) -> str:
 
 
 def build_layout(
-    hass: HomeAssistant, entry: ConfigEntry, panel_id: str, keys: Keys
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    panel_id: str,
+    keys: Keys,
+    kinds: Collection[str] = (),
 ) -> Layout:
-    """Return what the panel shows now."""
+    """Return what the panel shows now.
+
+    `kinds` is what the panel's hello lists in `caps.kinds`: a kind it
+    doesn't list becomes its fallback (appendix A).
+    """
     options = entry.options
     title = entry.title
     area = (
@@ -358,14 +371,16 @@ def build_layout(
         if state is None:
             waiting.add(entity_id)
             continue
-        item = entity_item(hass, state, keys(entity_id), area)
+        item = entity_item(hass, state, keys(entity_id), area, kinds)
         if item is not None:
             items.append(item)
 
     # The lists are in kind order already; this only keeps an entity saved in
     # the wrong section with its kind. The sort is stable, so the order within
-    # a kind is the user's.
-    items.sort(key=lambda item: KIND_ORDER.index(item.kind))
+    # a kind is the user's; fans stay among the switches.
+    items.sort(
+        key=lambda item: KIND_ORDER.index(FALLBACK_KINDS.get(item.kind, item.kind))
+    )
     lights = [item for item in items if item.kind == "light"]
     if options.get(CONF_ALL_LIGHTS, False) and len(lights) >= 2:
         items.insert(0, all_lights(lights))
@@ -379,16 +394,20 @@ def build_layout(
 
 
 def entity_item(
-    hass: HomeAssistant, state: State, key: str, area: ar.AreaEntry | None
+    hass: HomeAssistant,
+    state: State,
+    key: str,
+    area: ar.AreaEntry | None,
+    kinds: Collection[str] = (),
 ) -> Item | None:
     """Return the item an entity becomes, or None if no kind fits."""
     domain = state.domain
     kind = DOMAIN_KINDS.get(domain)
     attributes = state.attributes
-    if kind is None or (
-        domain == "fan" and attributes.get(ATTR_SUPPORTED_FEATURES, 0) & FAN_SET_SPEED
-    ):
+    if kind is None:
         return None
+    if domain in FALLBACK_KINDS and domain in kinds:
+        kind = domain
     features: dict[str, Any]
     if kind == "light":
         features = light_features(attributes)
@@ -396,6 +415,8 @@ def entity_item(
         features = climate_features(hass, attributes)
     elif kind == "cover":
         features = cover_features(attributes)
+    elif kind == "fan":
+        features = fan_features(attributes)
     elif kind == "sensor":
         unit = attributes.get(ATTR_UNIT_OF_MEASUREMENT)
         features = {"unit": unit} if unit else {}
@@ -484,6 +505,20 @@ def cover_features(attributes: Mapping[str, Any]) -> dict[str, bool]:
     }
 
 
+def fan_features(attributes: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a fan's features; its speeds are `percentage_step` apart."""
+    supported = attributes.get(ATTR_SUPPORTED_FEATURES, 0)
+    features: dict[str, Any] = {"speed": bool(supported & FAN_SET_SPEED)}
+    if features["speed"]:
+        step = attributes.get("percentage_step")
+        features["speed_step"] = round(float(step), 2) if step else 1
+    presets = attributes.get("preset_modes") if supported & FAN_PRESET_MODE else None
+    features["presets"] = _clip_list(presets or ())
+    features["oscillate"] = bool(supported & FAN_OSCILLATE)
+    features["direction"] = bool(supported & FAN_DIRECTION)
+    return features
+
+
 def builtin_icon(icon: object) -> str | None:
     """Return the built-in icon (appendix C) closest to a Material Design one."""
     if not isinstance(icon, str) or not icon.startswith("mdi:"):
@@ -568,6 +603,15 @@ def item_state(hass: HomeAssistant, item: Item) -> dict[str, Any]:
             else "closed",
             "position": position,
             "tilt": tilt,
+        }
+    elif item.kind == "fan":
+        direction = attributes.get("direction")
+        fields = {
+            "on": state.state == STATE_ON,
+            "percentage": attributes.get("percentage"),
+            "preset": attributes.get("preset_mode"),
+            "oscillating": bool(attributes.get("oscillating")),
+            "direction": direction if direction in FAN_DIRECTIONS else None,
         }
     elif item.kind == "sensor":
         fields = {"value": sensor_value(hass, state)}
@@ -662,6 +706,7 @@ COVER_ACTIONS: Final = {
 }
 NUMBER = vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))
 PERCENT = vol.All(vol.Coerce(int), vol.Range(min=0, max=100))
+BOOLEAN = vol.Schema(bool)
 
 
 async def async_handle_intent(
@@ -703,6 +748,8 @@ def service_call(
             return item.domain, "turn_on", {}
         if item.kind == "climate":
             return _climate_call(item, action, args)
+        if item.kind == "fan":
+            return _fan_call(item, action, args)
         if item.kind == "cover" and action in COVER_ACTIONS:
             feature, service, arg, attribute = COVER_ACTIONS[action]
             if not item.features.get(feature):
@@ -745,6 +792,27 @@ def _light_call(
                 raise IntentError("unsupported", f"{item.name} has no effect {value}")
             data[attribute] = value
     return "light", "turn_on", data
+
+
+def _fan_call(
+    item: Item, action: str, args: Mapping[str, Any]
+) -> tuple[str, str, dict[str, Any]]:
+    features = item.features
+    if action in ("toggle", "turn_on", "turn_off"):
+        return "fan", action, {}
+    if action == "set_percentage" and features.get("speed"):
+        return "fan", "set_percentage", {"percentage": PERCENT(args.get("percentage"))}
+    if action == "set_preset":
+        value = args.get("preset")
+        if value not in features.get("presets", []):
+            raise IntentError("unsupported", f"{item.name} has no preset {value}")
+        return "fan", "set_preset_mode", {"preset_mode": value}
+    if action == "oscillate" and features.get("oscillate"):
+        return "fan", "oscillate", {"oscillating": BOOLEAN(args.get("oscillating"))}
+    if action == "set_direction" and features.get("direction"):
+        direction = vol.In(FAN_DIRECTIONS)(args.get("direction"))
+        return "fan", "set_direction", {"direction": direction}
+    raise IntentError("unsupported", f"{item.name} can't {action}")
 
 
 def _climate_call(

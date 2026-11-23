@@ -404,7 +404,14 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
     def build_layout(self) -> Layout:
         """Return what the panel should show now."""
         entry = self.config_entry
-        layout = build_layout(self.hass, entry, self.panel_id, self._keys)
+        kinds = self.hello.caps.get("kinds") if self.hello else None
+        layout = build_layout(
+            self.hass,
+            entry,
+            self.panel_id,
+            self._keys,
+            kinds if isinstance(kinds, list) else (),
+        )
         if layout.left_out != self._left_out:
             self._left_out = layout.left_out
             if layout.left_out:
