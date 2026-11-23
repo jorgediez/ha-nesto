@@ -9,9 +9,9 @@
 Turns a Nest Learning Thermostat (2nd generation), running the
 [Nesto firmware](https://github.com/jorgediez/nesto-firmware), into a room
 panel for Home Assistant. Turn the ring and press to control the lights,
-climate, covers, switches and scenes of a room; the panel also shows Home
-Assistant's notifications, a clock while it rests, and reports its own
-temperature, humidity, light and motion sensors.
+climate, covers, locks, fans, switches and scenes of a room; the panel also
+shows Home Assistant's notifications, a clock while it rests, and reports
+its own temperature, humidity, light and motion sensors.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/jorgediez/nesto-firmware/v0.1.0/docs/images/home.png" width="160" alt="The panel's home screen, showing a light">
@@ -93,8 +93,8 @@ when you add the panel; to change it, open the panel's device page and set
 its area. Until it's in an area, the panel shows only its name.
 
 In the area, the panel shows the lights, switches, input booleans, fans,
-scenes, scripts, climate entities and covers: those put in the area, and
-those whose device is in it, unless the entity was put in another area.
+scenes, scripts, climate entities, covers and locks: those put in the area,
+and those whose device is in it, unless the entity was put in another area.
 Hidden entities, and configuration and diagnostic ones, are left out. The
 area's name is the panel's title, and dropped from the front of the
 entities' names ("Living room lamp" shows as "Lamp").
@@ -107,7 +107,8 @@ The integration's **Configure** options choose between:
   under the entry's name.
 
 Either way, the next form has a section per kind: lights, climate, covers,
-switches (with input booleans and fans), scenes (with scripts) and sensors.
+locks, switches (with input booleans and fans), scenes (with scripts) and
+sensors.
 The panel shows them in that order, and within each section in the order
 you drag them into. In the panel's room, the sections start with the area's
 entities, by name, except sensors, which a room doesn't show unless you add
@@ -136,6 +137,7 @@ What each kind can do on the panel:
 | Scene | `scene`, `script` | Activate (a script starts; the panel doesn't wait for it to finish) |
 | Climate | `climate` | Target temperature or range, HVAC mode, preset and fan mode, as the entity supports |
 | Cover | `cover` | Open, close, stop, position and tilt, as the cover supports |
+| Lock | `lock` | Lock, unlock and open the latch, as the lock supports. The panel asks before unlocking or opening. A lock that needs a code shows only with a default code set in its entity settings in Home Assistant, which fills it in. Needs firmware 0.3.0 or later; older firmware leaves locks out |
 | Sensor | `sensor` | Its value, with the precision Home Assistant shows; read only |
 
 When something on the panel can't be done (the entity is unavailable, or its
@@ -377,7 +379,7 @@ checks GitHub for a new firmware release when it starts, then every 12 hours.
 
 - One Home Assistant per panel, and one panel per entry.
 - The panel shows 48 items at most, and only the kinds in *Choosing the
-  room*: no media players or locks yet.
+  room*: no media players yet.
 - Notifications live in the panel's memory: a restart loses them, and Home
   Assistant doesn't send them again.
 - Not yet: a picture carousel while the panel rests, and languages other

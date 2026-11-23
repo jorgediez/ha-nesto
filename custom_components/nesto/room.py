@@ -2,7 +2,8 @@
 
 PROTOCOL.md appendix A describes the mapping; sections 9 to 11 the messages.
 The options keep one ordered list of entities per section (lights, climate,
-covers, switches, scenes, sensors), which the panel shows in that order. In
+covers, locks, switches, scenes, sensors), which the panel shows in that
+order. In
 room mode the lists start as the area the panel's own device is in, so
 choosing the panel's area in Home Assistant chooses its room, and they follow
 the area: entities added to it later come after the user's, by name, and the
@@ -73,17 +74,19 @@ DOMAIN_KINDS: Final = {
     "script": "scene",
     "climate": "climate",
     "cover": "cover",
+    "lock": "lock",
     "sensor": "sensor",
 }
 # What room mode takes from an area: sensors only when the user picks them.
 ROOM_DOMAINS: Final = frozenset(DOMAIN_KINDS) - {"sensor"}
 # Appendix A's order: synthetic "all lights", then these.
-KIND_ORDER: Final = ("light", "climate", "cover", "switch", "scene", "sensor")
+KIND_ORDER: Final = ("light", "climate", "cover", "lock", "switch", "scene", "sensor")
 # The options' sections, one per kind, in that order.
 SECTIONS: Final = {
     "lights": "light",
     "climate": "climate",
     "covers": "cover",
+    "locks": "lock",
     "switches": "switch",
     "scenes": "scene",
     "sensors": "sensor",
@@ -91,6 +94,8 @@ SECTIONS: Final = {
 SECTION_OF_KIND: Final = {kind: section for section, kind in SECTIONS.items()}
 # Kinds that newer panels draw, and the kind an older one gets instead.
 FALLBACK_KINDS: Final = {"fan": "switch"}
+# Kinds that newer panels draw, left out on an older one.
+NEW_KINDS: Final = frozenset({"lock"})
 
 
 def section_domains(section: str) -> list[str]:
@@ -101,6 +106,10 @@ def section_domains(section: str) -> list[str]:
 # FanEntityFeature.
 FAN_SET_SPEED, FAN_OSCILLATE, FAN_DIRECTION, FAN_PRESET_MODE = 1, 2, 4, 8
 FAN_DIRECTIONS: Final = ("forward", "reverse")
+LOCK_OPEN: Final = 1  # LockEntityFeature.OPEN
+LOCK_STATES: Final = frozenset(
+    {"locked", "unlocked", "locking", "unlocking", "jammed", "open", "opening"}
+)
 CLIMATE_TARGET: Final = 1  # ClimateEntityFeature.TARGET_TEMPERATURE
 CLIMATE_RANGE: Final = 2  # ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
 COVER_OPEN, COVER_CLOSE, COVER_POSITION, COVER_STOP = 1, 2, 4, 8
@@ -404,10 +413,17 @@ def entity_item(
     domain = state.domain
     kind = DOMAIN_KINDS.get(domain)
     attributes = state.attributes
-    if kind is None:
+    if kind is None or (kind in NEW_KINDS and kind not in kinds):
         return None
     if domain in FALLBACK_KINDS and domain in kinds:
         kind = domain
+    if (
+        kind == "lock"
+        and attributes.get("code_format")
+        and not _default_code(hass, state.entity_id)
+    ):
+        # The panel never asks for a code: Home Assistant fills in its default.
+        return None
     features: dict[str, Any]
     if kind == "light":
         features = light_features(attributes)
@@ -417,6 +433,9 @@ def entity_item(
         features = cover_features(attributes)
     elif kind == "fan":
         features = fan_features(attributes)
+    elif kind == "lock":
+        supported = attributes.get(ATTR_SUPPORTED_FEATURES, 0)
+        features = {"open": bool(supported & LOCK_OPEN)}
     elif kind == "sensor":
         unit = attributes.get(ATTR_UNIT_OF_MEASUREMENT)
         features = {"unit": unit} if unit else {}
@@ -428,8 +447,15 @@ def entity_item(
         name=_clip(_short_name(state.name, area)),
         entity_ids=(state.entity_id,),
         features=features,
-        icon=icon_for(state),
+        # A lock's icon follows its state on the panel: lock, or lock-open.
+        icon=None if kind == "lock" else icon_for(state),
     )
+
+
+def _default_code(hass: HomeAssistant, entity_id: str) -> bool:
+    """Return whether a lock has a default code in its entity settings."""
+    entry = er.async_get(hass).async_get(entity_id)
+    return bool(entry and entry.options.get("lock", {}).get("default_code"))
 
 
 def all_lights(lights: list[Item]) -> Item:
@@ -613,6 +639,8 @@ def item_state(hass: HomeAssistant, item: Item) -> dict[str, Any]:
             "oscillating": bool(attributes.get("oscillating")),
             "direction": direction if direction in FAN_DIRECTIONS else None,
         }
+    elif item.kind == "lock":
+        fields = {"state": state.state if state.state in LOCK_STATES else None}
     elif item.kind == "sensor":
         fields = {"value": sensor_value(hass, state)}
     else:
@@ -750,6 +778,10 @@ def service_call(
             return _climate_call(item, action, args)
         if item.kind == "fan":
             return _fan_call(item, action, args)
+        if item.kind == "lock" and action in ("lock", "unlock"):
+            return "lock", action, {}
+        if item.kind == "lock" and action == "open" and item.features.get("open"):
+            return "lock", "open", {}
         if item.kind == "cover" and action in COVER_ACTIONS:
             feature, service, arg, attribute = COVER_ACTIONS[action]
             if not item.features.get(feature):

@@ -102,6 +102,15 @@
               "entities": "Blinds, shutters, curtains and garage doors. Starts with the room's. Drag to change the order the panel shows them in."
             }
           },
+          "locks": {
+            "name": "Locks",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Locks; one that needs a code only with a default code in its entity settings. Needs Nesto firmware 0.3.0 or later. Starts with the room's. Drag to change the order the panel shows them in."
+            }
+          },
           "switches": {
             "name": "Switches",
             "data": {
@@ -133,7 +142,7 @@
       },
       "room_no_area": {
         "title": "The panel's room",
-        "description": "The panel isn't in an area yet. Put it in one on its device page, and the area's lights, switches, fans, scenes, scripts, climate and covers appear here and on the panel. Meanwhile it shows what you pick below.",
+        "description": "The panel isn't in an area yet. Put it in one on its device page, and the area's lights, switches, fans, scenes, scripts, climate, covers and locks appear here and on the panel. Meanwhile it shows what you pick below.",
         "sections": {
           "lights": {
             "name": "Lights",
@@ -162,6 +171,15 @@
             },
             "data_description": {
               "entities": "Blinds, shutters, curtains and garage doors. Drag to change the order the panel shows them in."
+            }
+          },
+          "locks": {
+            "name": "Locks",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Locks; one that needs a code only with a default code in its entity settings. Needs Nesto firmware 0.3.0 or later. Drag to change the order the panel shows them in."
             }
           },
           "switches": {
@@ -224,6 +242,15 @@
             },
             "data_description": {
               "entities": "Blinds, shutters, curtains and garage doors. Drag to change the order the panel shows them in."
+            }
+          },
+          "locks": {
+            "name": "Locks",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Locks; one that needs a code only with a default code in its entity settings. Needs Nesto firmware 0.3.0 or later. Drag to change the order the panel shows them in."
             }
           },
           "switches": {
