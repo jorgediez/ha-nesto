@@ -1013,3 +1013,144 @@ async def test_fan_intents_refused(
 ) -> None:
     answer = await intent(hass, clients, name, action, **args)
     assert answer[:2] == (5, code)
+
+
+# Locks -------------------------------------------------------------------------
+
+LOCKS = {
+    "lock.front": ("locked", {"friendly_name": "Front door", "supported_features": 1}),
+    "lock.back": ("unlocked", {"friendly_name": "Back door", "supported_features": 0}),
+    "lock.gate": ("unknown", {"friendly_name": "Gate"}),
+    # Needs a code: shown only with a default code in its entity settings.
+    "lock.shed": ("locked", {"friendly_name": "Shed", "code_format": r"^\d{4}$"}),
+    "lock.safe": ("locked", {"friendly_name": "Safe", "code_format": r"^\d{4}$"}),
+}
+LOCK_OPTIONS = {
+    CONF_MODE: MODE_MANUAL,
+    "lights": ["light.lamp"],
+    "covers": ["cover.blind"],
+    "locks": list(LOCKS),
+    "switches": ["fan.simple", "switch.fan_plug"],
+}
+
+
+@pytest.fixture
+def lock_states(hass: HomeAssistant, area: ar.AreaEntry) -> None:
+    register(hass, "lock.shed", None)
+    er.async_get(hass).async_update_entity_options(
+        "lock.shed", "lock", {"default_code": "1234"}
+    )
+    for entity_id, (state, attributes) in LOCKS.items():
+        hass.states.async_set(entity_id, state, attributes)
+
+
+@pytest.fixture
+async def locks(
+    hass: HomeAssistant, lock_states: None, config_entry: MockConfigEntry, clients
+) -> MockConfigEntry:
+    """A panel that draws locks and fans, showing locks among other kinds."""
+    clients.hello = make_hello(
+        caps={"beeper": True, "input": ["ring", "press"], "kinds": [*KINDS, "lock"]}
+    )
+    await setup_with(hass, config_entry, LOCK_OPTIONS)
+    yield config_entry
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+async def test_locks_on_a_panel_that_draws_them(
+    hass: HomeAssistant, locks: MockConfigEntry, clients: ClientFactory
+) -> None:
+    client = clients.last
+    layout = last(client, "layout")
+    # After the covers, before the switches; the safe needs a code it hasn't got.
+    assert [(i["name"], i["kind"]) for i in layout["items"]] == [
+        ("Reading lamp", "light"),
+        ("Window blind", "cover"),
+        ("Front door", "lock"),
+        ("Back door", "lock"),
+        ("Gate", "lock"),
+        ("Shed", "lock"),
+        ("Ceiling fan", "fan"),
+        ("Fan plug", "switch"),
+    ]
+    names = items_by_name(layout)
+    # No icon: the panel shows a lock, open or not, as its state says.
+    assert names["Front door"] == {
+        "key": names["Front door"]["key"],
+        "kind": "lock",
+        "name": "Front door",
+        "features": {"open": True},
+    }
+    assert names["Back door"]["features"] == {"open": False}
+
+    states = last(client, "states")["items"]
+    assert states[names["Front door"]["key"]] == {"available": True, "state": "locked"}
+    assert states[names["Back door"]["key"]] == {"available": True, "state": "unlocked"}
+    assert states[names["Gate"]["key"]] == {"available": True, "state": None}
+
+    hass.states.async_set("lock.front", "jammed", LOCKS["lock.front"][1])
+    await hass.async_block_till_done()
+    assert last(client, "states")["items"] == {
+        names["Front door"]["key"]: {"state": "jammed"}
+    }
+    hass.states.async_set("lock.front", "unavailable", LOCKS["lock.front"][1])
+    await hass.async_block_till_done()
+    assert last(client, "states")["items"] == {
+        names["Front door"]["key"]: {"available": False}
+    }
+
+
+async def test_locks_are_left_out_on_an_older_panel(
+    hass: HomeAssistant, lock_states: None, config_entry: MockConfigEntry, clients
+) -> None:
+    await setup_with(hass, config_entry, LOCK_OPTIONS)
+    layout = last(clients.last, "layout")
+    assert [i["name"] for i in layout["items"]] == [
+        "Reading lamp",
+        "Window blind",
+        "Ceiling fan",
+        "Fan plug",
+    ]
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+@pytest.mark.parametrize(
+    ("name", "action", "service"),
+    [
+        ("Front door", "lock", "lock.lock"),
+        ("Front door", "unlock", "lock.unlock"),
+        ("Front door", "open", "lock.open"),
+        ("Shed", "unlock", "lock.unlock"),
+    ],
+)
+async def test_lock_intents(
+    hass: HomeAssistant,
+    locks: MockConfigEntry,
+    clients: ClientFactory,
+    name: str,
+    action: str,
+    service: str,
+) -> None:
+    domain, service_name = service.split(".")
+    calls = async_mock_service(hass, domain, service_name)
+    answer = await intent(hass, clients, name, action)
+    assert answer == (5,)
+    assert len(calls) == 1
+    # No code: Home Assistant fills in the shed's default one.
+    entity_id = next(e for e, (_, a) in LOCKS.items() if a["friendly_name"] == name)
+    assert calls[0].data == {"entity_id": [entity_id]}
+
+
+@pytest.mark.parametrize(
+    ("name", "action"),
+    [("Back door", "open"), ("Front door", "toggle"), ("Front door", "turn_on")],
+)
+async def test_lock_intents_refused(
+    hass: HomeAssistant,
+    locks: MockConfigEntry,
+    clients: ClientFactory,
+    name: str,
+    action: str,
+) -> None:
+    answer = await intent(hass, clients, name, action)
+    assert answer[:2] == (5, "unsupported")

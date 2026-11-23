@@ -54,6 +54,7 @@ async def test_diagnostics(
             "lights": 0,
             "climate": 0,
             "covers": 0,
+            "locks": 0,
             "switches": 0,
             "scenes": 0,
             "sensors": 0,
