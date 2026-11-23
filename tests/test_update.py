@@ -40,7 +40,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
     EntityCategory,
 )
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
@@ -319,6 +319,7 @@ async def test_install(
     entity_id = firmware_entity(hass, init_integration)
     seen: list[tuple[str, Any, Any]] = []
 
+    @callback
     def follow(event: Event[EventStateChangedData]) -> None:
         new = event.data["new_state"]
         if event.data["entity_id"] != entity_id or new is None:

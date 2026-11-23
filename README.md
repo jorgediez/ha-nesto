@@ -26,7 +26,7 @@ connection with Home Assistant, which pushes what the panel shows and carries
 out what the user does on it. The panel holds no Home Assistant token and
 never talks to the internet.
 
-Tested on a Nest Learning Thermostat (2nd generation) with firmware 0.1.0,
+Tested on a Nest Learning Thermostat (2nd generation) with firmware 0.2.1,
 on its EU base and a USB stand, and against the firmware's simulator.
 
 ## Features
@@ -379,8 +379,8 @@ checks GitHub for a new firmware release when it starts, then every 12 hours.
   room*: no media players, locks or fans with speeds yet.
 - Notifications live in the panel's memory: a restart loses them, and Home
   Assistant doesn't send them again.
-- Not yet: a picture carousel while the panel rests, languages other than
-  English on the panel, and rebooting it from Home Assistant.
+- Not yet: a picture carousel while the panel rests, and languages other
+  than English on the panel.
 - The light level is the sensor's raw value, not lux.
 - Tested on one thermostat; running on a wall's heating wires, rather than a
   USB stand, is untested on the firmware's side.
