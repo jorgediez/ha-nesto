@@ -167,6 +167,9 @@ entity's last known state again.
   *Notifications*).
 - **Identify** (button, under configuration): the panel wakes, pulses its
   backlight and beeps three times, so you can tell which one it is.
+- **Restart** (button, under configuration): reboots the thermostat. The
+  panel hands the base back, restarts, and is back in about a minute. Firmware
+  0.2.1 and newer can; on an older one the button is unavailable.
 - **Firmware** (update, under configuration): the Nesto version the panel
   runs, and the latest release (see *Firmware updates*).
 - Under diagnostic: **Battery voltage**, **Last restart** and **Base
@@ -246,6 +249,8 @@ screen with the progress, then restarts with it: about a minute in all.
   shows the release but has no Install button: update that one over SSH, as
   the [install guide](https://github.com/jorgediez/nesto-firmware/blob/main/docs/INSTALL.md#updating)
   describes. An older version also goes in over SSH.
+- Home Assistant checks for a new release every 12 hours. To check now, run
+  the `homeassistant.update_entity` action on the Firmware entity.
 
 ## Notifications
 
