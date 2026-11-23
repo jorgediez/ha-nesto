@@ -108,7 +108,7 @@
               "entities": "On the panel, in this order"
             },
             "data_description": {
-              "entities": "Switches, input booleans and fans without speed control. Starts with the room's. Drag to change the order the panel shows them in."
+              "entities": "Switches, input booleans and fans. Starts with the room's. Drag to change the order the panel shows them in."
             }
           },
           "scenes": {
@@ -170,7 +170,7 @@
               "entities": "On the panel, in this order"
             },
             "data_description": {
-              "entities": "Switches, input booleans and fans without speed control. Drag to change the order the panel shows them in."
+              "entities": "Switches, input booleans and fans. Drag to change the order the panel shows them in."
             }
           },
           "scenes": {
@@ -232,7 +232,7 @@
               "entities": "On the panel, in this order"
             },
             "data_description": {
-              "entities": "Switches, input booleans and fans without speed control. Drag to change the order the panel shows them in."
+              "entities": "Switches, input booleans and fans. Drag to change the order the panel shows them in."
             }
           },
           "scenes": {

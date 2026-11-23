@@ -92,12 +92,12 @@ The panel shows the area its device is in. Home Assistant asks for an area
 when you add the panel; to change it, open the panel's device page and set
 its area. Until it's in an area, the panel shows only its name.
 
-In the area, the panel shows the lights, switches, input booleans, fans
-without speed control, scenes, scripts, climate entities and covers: those
-put in the area, and those whose device is in it, unless the entity was put
-in another area. Hidden entities, and configuration and diagnostic ones, are
-left out. The area's name is the panel's title, and dropped from the front
-of the entities' names ("Living room lamp" shows as "Lamp").
+In the area, the panel shows the lights, switches, input booleans, fans,
+scenes, scripts, climate entities and covers: those put in the area, and
+those whose device is in it, unless the entity was put in another area.
+Hidden entities, and configuration and diagnostic ones, are left out. The
+area's name is the panel's title, and dropped from the front of the
+entities' names ("Living room lamp" shows as "Lamp").
 
 The integration's **Configure** options choose between:
 
@@ -131,7 +131,8 @@ What each kind can do on the panel:
 |---|---|---|
 | Light | `light` | On, off, brightness, colour temperature, colour and effects, as the light supports |
 | All lights | every light shown | On, off and brightness for all of them at once |
-| Switch | `switch`, `input_boolean`, `fan` without speeds | On and off |
+| Switch | `switch`, `input_boolean` | On and off |
+| Fan | `fan` | On, off, speed, preset, oscillation and direction, as the fan supports; shown with the switches. Firmware 0.2.1 and older show a fan as a switch |
 | Scene | `scene`, `script` | Activate (a script starts; the panel doesn't wait for it to finish) |
 | Climate | `climate` | Target temperature or range, HVAC mode, preset and fan mode, as the entity supports |
 | Cover | `cover` | Open, close, stop, position and tilt, as the cover supports |
@@ -376,7 +377,7 @@ checks GitHub for a new firmware release when it starts, then every 12 hours.
 
 - One Home Assistant per panel, and one panel per entry.
 - The panel shows 48 items at most, and only the kinds in *Choosing the
-  room*: no media players, locks or fans with speeds yet.
+  room*: no media players or locks yet.
 - Notifications live in the panel's memory: a restart loses them, and Home
   Assistant doesn't send them again.
 - Not yet: a picture carousel while the panel rests, and languages other

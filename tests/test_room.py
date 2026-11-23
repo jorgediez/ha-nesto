@@ -30,7 +30,7 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.entity import EntityCategory
 
-from .common import PANEL_ID, TITLE, ClientFactory
+from .common import PANEL_ID, TITLE, ClientFactory, make_hello
 
 LIGHT_ATTRS = {
     "friendly_name": "Living room Ceiling",
@@ -172,8 +172,10 @@ async def test_moving_the_panel_shows_its_room(
         ("Reading lamp", "light"),
         ("Radiator", "climate"),
         ("Window blind", "cover"),
+        # A panel that doesn't list `fan` in caps.kinds gets switches.
         ("Ceiling fan", "switch"),
         ("Fan plug", "switch"),
+        ("Speed fan", "switch"),
         ("Bedtime", "scene"),
         ("Film night", "scene"),
     ]
@@ -295,6 +297,7 @@ async def test_room_options(
         "Window blind",
         "Fan plug",
         "Ceiling fan",
+        "Speed fan",
         "Film night",
         "CO2",
     ]
@@ -316,7 +319,7 @@ async def test_room_options(
         for i in last(clients.last, "layout")["items"]
         if i["kind"] == "switch"
     ]
-    assert switches == ["Fan plug", "Aaa", "Ceiling fan"]
+    assert switches == ["Fan plug", "Aaa", "Ceiling fan", "Speed fan"]
     await hass.config_entries.async_unload(config_entry.entry_id)
 
 
@@ -357,7 +360,7 @@ async def test_manual_mode(
             "switches": [
                 "switch.kitchen",
                 "media_player.tv",  # no kind for it
-                "fan.speeds",  # nor for a fan with speeds
+                "fan.speeds",  # a switch, on a panel without fans
                 "light.ceiling",  # in the wrong list, it still goes with the lights
             ],
             "sensors": ["sensor.co2"],
@@ -372,6 +375,7 @@ async def test_manual_mode(
         "Desk",
         "Living room Ceiling",
         "kitchen",
+        "Speed fan",
         "CO2",
     ]
     await hass.config_entries.async_unload(config_entry.entry_id)
@@ -837,3 +841,175 @@ async def test_an_answer_that_cant_be_sent(
     clients.last.on_message({"t": "intent", "id": 5, "key": key, "action": "toggle"})
     await hass.async_block_till_done()
     assert in_room.runtime_data.data.connected
+
+
+# Fans --------------------------------------------------------------------------
+
+KINDS = ["light", "switch", "scene", "climate", "cover", "sensor", "fan"]
+BEDROOM_FAN = {
+    "friendly_name": "Bedroom fan",
+    "supported_features": 1 | 2 | 4 | 8 | 16 | 32,
+    "percentage": 67,
+    "percentage_step": 100 / 3,
+    "preset_modes": ["breeze", "sleep"],
+    "preset_mode": None,
+    "oscillating": False,
+    "direction": "forward",
+}
+FANS = {
+    "Bedroom fan": "fan.bedroom",
+    "Ceiling fan": "fan.simple",
+    "Speed fan": "fan.speeds",
+}
+
+
+@pytest.fixture
+async def fans(
+    hass: HomeAssistant, area: ar.AreaEntry, config_entry: MockConfigEntry, clients
+) -> MockConfigEntry:
+    """A panel that draws fans, showing three among a light, a switch and a scene."""
+    clients.hello = make_hello(
+        caps={"beeper": True, "input": ["ring", "press"], "kinds": KINDS}
+    )
+    hass.states.async_set("fan.bedroom", "on", BEDROOM_FAN)
+    await setup_with(
+        hass,
+        config_entry,
+        {
+            CONF_MODE: MODE_MANUAL,
+            "lights": ["light.lamp"],
+            "switches": ["fan.bedroom", "switch.fan_plug", "fan.simple", "fan.speeds"],
+            "scenes": ["scene.film"],
+        },
+    )
+    yield config_entry
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+async def test_fans_on_a_panel_that_draws_them(
+    hass: HomeAssistant, fans: MockConfigEntry, clients: ClientFactory
+) -> None:
+    client = clients.last
+    layout = last(client, "layout")
+    # Among the switches, in the user's order.
+    assert [(i["name"], i["kind"]) for i in layout["items"]] == [
+        ("Reading lamp", "light"),
+        ("Bedroom fan", "fan"),
+        ("Fan plug", "switch"),
+        ("Ceiling fan", "fan"),
+        ("Speed fan", "fan"),
+        ("Film night", "scene"),
+    ]
+    names = items_by_name(layout)
+    assert names["Bedroom fan"]["icon"] == "fan"
+    assert names["Bedroom fan"]["features"] == {
+        "speed": True,
+        "speed_step": 33.33,
+        "presets": ["breeze", "sleep"],
+        "oscillate": True,
+        "direction": True,
+    }
+    assert names["Ceiling fan"]["features"] == {
+        "speed": False,
+        "presets": [],
+        "oscillate": False,
+        "direction": False,
+    }
+    # A fan with speeds that doesn't say how far apart: every percent.
+    assert names["Speed fan"]["features"]["speed_step"] == 1
+
+    states = last(client, "states")["items"]
+    assert states[names["Bedroom fan"]["key"]] == {
+        "available": True,
+        "on": True,
+        "percentage": 67,
+        "preset": None,
+        "oscillating": False,
+        "direction": "forward",
+    }
+    assert states[names["Ceiling fan"]["key"]] == {
+        "available": True,
+        "on": True,
+        "percentage": None,
+        "preset": None,
+        "oscillating": False,
+        "direction": None,
+    }
+
+    hass.states.async_set(
+        "fan.bedroom",
+        "on",
+        {
+            **BEDROOM_FAN,
+            "preset_mode": "sleep",
+            "oscillating": True,
+            "direction": "reverse",
+        },
+    )
+    await hass.async_block_till_done()
+    assert last(client, "states")["items"] == {
+        names["Bedroom fan"]["key"]: {
+            "preset": "sleep",
+            "oscillating": True,
+            "direction": "reverse",
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    ("name", "action", "args", "service", "data"),
+    [
+        ("Bedroom fan", "toggle", {}, "fan.toggle", {}),
+        ("Bedroom fan", "turn_off", {}, "fan.turn_off", {}),
+        ("Ceiling fan", "turn_on", {}, "fan.turn_on", {}),
+        ("Bedroom fan", "set_percentage", {"percentage": 33}, "fan.set_percentage", {"percentage": 33}),
+        ("Bedroom fan", "set_percentage", {"percentage": 0}, "fan.set_percentage", {"percentage": 0}),
+        ("Bedroom fan", "set_preset", {"preset": "sleep"}, "fan.set_preset_mode", {"preset_mode": "sleep"}),
+        ("Bedroom fan", "oscillate", {"oscillating": True}, "fan.oscillate", {"oscillating": True}),
+        ("Bedroom fan", "set_direction", {"direction": "reverse"}, "fan.set_direction", {"direction": "reverse"}),
+    ],
+)  # fmt: skip
+async def test_fan_intents(
+    hass: HomeAssistant,
+    fans: MockConfigEntry,
+    clients: ClientFactory,
+    name: str,
+    action: str,
+    args: dict[str, Any],
+    service: str,
+    data: dict[str, Any],
+) -> None:
+    domain, service_name = service.split(".")
+    calls = async_mock_service(hass, domain, service_name)
+    answer = await intent(hass, clients, name, action, **args)
+    assert answer == (5,)
+    assert len(calls) == 1
+    assert calls[0].data == {"entity_id": [FANS[name]], **data}
+
+
+@pytest.mark.parametrize(
+    ("name", "action", "args", "code"),
+    [
+        ("Ceiling fan", "set_percentage", {"percentage": 50}, "unsupported"),
+        ("Ceiling fan", "oscillate", {"oscillating": True}, "unsupported"),
+        ("Ceiling fan", "set_direction", {"direction": "forward"}, "unsupported"),
+        ("Ceiling fan", "set_preset", {"preset": "breeze"}, "unsupported"),
+        ("Bedroom fan", "set_preset", {"preset": "turbo"}, "unsupported"),
+        ("Bedroom fan", "activate", {}, "unsupported"),
+        ("Bedroom fan", "set_percentage", {"percentage": 140}, "bad_request"),
+        ("Bedroom fan", "set_percentage", {}, "bad_request"),
+        ("Bedroom fan", "oscillate", {"oscillating": "yes"}, "bad_request"),
+        ("Bedroom fan", "set_direction", {"direction": "up"}, "bad_request"),
+    ],
+)
+async def test_fan_intents_refused(
+    hass: HomeAssistant,
+    fans: MockConfigEntry,
+    clients: ClientFactory,
+    name: str,
+    action: str,
+    args: dict[str, Any],
+    code: str,
+) -> None:
+    answer = await intent(hass, clients, name, action, **args)
+    assert answer[:2] == (5, code)
