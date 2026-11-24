@@ -39,6 +39,7 @@ on its EU base and a USB stand, and against the firmware's simulator.
 - Its temperature, humidity, light and motion sensors.
 - Presses (single, double, long) and notification buttons as events.
 - Notifications, with priorities, beeps and up to three buttons.
+- The item the panel wakes on, and an action that shows an item.
 
 ## Installation
 
@@ -234,6 +235,7 @@ brackets), so a panel nobody has configured behaves as it always has.
 | Ring click | A click on each step of the ring (on). |
 | Press click | A click on pressing the screen (off). |
 | Notification sounds | Notifications may beep (on). |
+| Wake on | The item the panel selects when it wakes: *First in the list*, or one of its items (First in the list). Unread notifications still come first. Home Assistant's own, sent with the room; needs firmware 0.3.0 or later. |
 | Temperature offset | Added to the temperature reading, −10 to +10 °C (0). The head unit warms itself, so its reading runs high: set this to the difference from a thermometer next to it. Home Assistant's own, never sent to the panel; only on a panel with a temperature sensor. |
 
 ## Firmware updates
@@ -319,6 +321,33 @@ actions:
 
 The panel keeps the 10 most recent notifications in memory: a panel that
 restarts has none, and Home Assistant doesn't send them again.
+
+## Showing an item
+
+`nesto.show` wakes the panel on one of its items, given by its `entity_id`,
+and with `open: true` opens its controls, as a press on it would (switches,
+scenes and sensors are only selected). The panel's menu, a question or its
+notification list closes; a notification on screen stays until it's answered.
+It needs firmware 0.3.0 or later. For example, the hall light's controls when
+someone comes in at night:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.hall_motion
+    to: "on"
+conditions:
+  - condition: sun
+    after: sunset
+actions:
+  - action: nesto.show
+    data:
+      config_entry_id: 01JXXXXXXXXXXXXXXXXXXXXXXX  # the panel's entry
+      entity_id: light.hall
+      open: true
+```
+
+To choose the item the panel wakes on every time, use its *Wake on* setting.
 
 ## Troubleshooting
 

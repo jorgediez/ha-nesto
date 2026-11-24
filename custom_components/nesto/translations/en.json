@@ -411,6 +411,12 @@
           "analog": "Analog",
           "digital": "Digital"
         }
+      },
+      "local_wake": {
+        "name": "Wake on",
+        "state": {
+          "first": "First in the list"
+        }
       }
     },
     "sensor": {
@@ -521,8 +527,14 @@
     "firmware_unsupported": {
       "message": "{name} doesn't take firmware updates from Home Assistant, or not this one: install it over SSH."
     },
+    "not_on_panel": {
+      "message": "{entity_id} isn't on {name}."
+    },
     "panel_not_loaded": {
       "message": "{name} isn't set up; check its entry."
+    },
+    "show_unsupported": {
+      "message": "{name} can't show an item: it needs Nesto firmware 0.3.0 or later."
     },
     "too_long": {
       "message": "The {field} is too long: the panel takes {limit} characters at most."
@@ -597,6 +609,24 @@
         "id": {
           "name": "ID",
           "description": "The notification to remove; leave it out to remove them all."
+        }
+      }
+    },
+    "show": {
+      "name": "Show an item",
+      "description": "Wakes a Nesto Panel on one of its items, and can open its controls.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Panel",
+          "description": "The panel to show it on."
+        },
+        "entity_id": {
+          "name": "Entity",
+          "description": "The entity to show; it must be on the panel. A light shows on its own, not as part of All lights."
+        },
+        "open": {
+          "name": "Open",
+          "description": "Open its controls, as a press on it would. Switches, scenes and sensors are only selected."
         }
       }
     }

@@ -1,4 +1,4 @@
-"""The panel's actions: show a notification, and clear them."""
+"""The panel's actions: show a notification, clear them, and show an item."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any, Final
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import ATTR_CONFIG_ENTRY_ID, ATTR_ICON
+from homeassistant.const import ATTR_CONFIG_ENTRY_ID, ATTR_ENTITY_ID, ATTR_ICON
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -24,6 +24,7 @@ from .notifications import BEEPS, MAX_DURATION, PRIORITIES, build_notification
 
 SERVICE_NOTIFY: Final = "notify"
 SERVICE_CLEAR: Final = "clear_notification"
+SERVICE_SHOW: Final = "show"
 
 ATTR_MESSAGE: Final = "message"
 ATTR_TITLE: Final = "title"
@@ -32,6 +33,7 @@ ATTR_PRIORITY: Final = "priority"
 ATTR_DURATION: Final = "duration"
 ATTR_BEEP: Final = "beep"
 ATTR_BUTTONS: Final = "buttons"
+ATTR_OPEN: Final = "open"
 
 NOTIFY_SCHEMA: Final = vol.Schema(
     {
@@ -52,6 +54,13 @@ CLEAR_SCHEMA: Final = vol.Schema(
     {
         vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string,
         vol.Optional(ATTR_ID): cv.string,
+    }
+)
+SHOW_SCHEMA: Final = vol.Schema(
+    {
+        vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Optional(ATTR_OPEN, default=False): cv.boolean,
     }
 )
 
@@ -87,6 +96,11 @@ async def _async_clear(call: ServiceCall) -> None:
     await entry.runtime_data.async_clear_notifications(call.data.get(ATTR_ID))
 
 
+async def _async_show(call: ServiceCall) -> None:
+    entry = _entry(call.hass, call.data[ATTR_CONFIG_ENTRY_ID])
+    await entry.runtime_data.async_show(call.data[ATTR_ENTITY_ID], call.data[ATTR_OPEN])
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the actions, once for every panel."""
@@ -100,3 +114,4 @@ def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN, SERVICE_CLEAR, _async_clear, schema=CLEAR_SCHEMA
     )
+    hass.services.async_register(DOMAIN, SERVICE_SHOW, _async_show, schema=SHOW_SCHEMA)

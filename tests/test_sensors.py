@@ -288,7 +288,7 @@ async def test_temperature_offset(
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=5))
     await hass.async_block_till_done()
     stored = hass_storage[f"{DOMAIN}.{on_base.entry_id}"]["data"]
-    assert stored["local"] == {"temperature_offset": -2.3}
+    assert stored["local"] == {"temperature_offset": -2.3, "wake": ""}
 
 
 async def test_a_stored_whole_offset(

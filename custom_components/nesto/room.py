@@ -239,10 +239,16 @@ class Layout:
     # Entities the room would show if they had a state, or fewer items.
     waiting: frozenset[str] = frozenset()
     left_out: tuple[str, ...] = ()
+    # The key of the item the panel wakes on, if any.
+    wake: str | None = None
 
     def item(self, key: str) -> Item | None:
         """Return the item with this key."""
         return next((item for item in self.items if item.key == key), None)
+
+    def find(self, target: str) -> Item | None:
+        """Return an entity's own item, or All lights for its `target`."""
+        return next((item for item in self.items if target_of(item) == target), None)
 
     def as_message(self, rev: int) -> dict[str, Any]:
         """Return the `layout` message (section 9)."""
@@ -251,12 +257,20 @@ class Layout:
             "rev": rev,
             "title": self.title,
             "items": [item.as_layout() for item in self.items],
-        }
+        } | ({"wake": self.wake} if self.wake else {})
 
     @property
     def entity_ids(self) -> set[str]:
         """Return every entity the items show."""
         return {entity_id for item in self.items for entity_id in item.entity_ids}
+
+
+def target_of(item: Item) -> str:
+    """Return what names an item in settings and actions.
+
+    That's its entity, or `all` for All lights.
+    """
+    return ALL_LIGHTS_KEY if item.key == ALL_LIGHTS_KEY else item.entity_id
 
 
 class Keys:

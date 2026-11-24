@@ -51,8 +51,12 @@ LOCAL: Final = "local"
 LOCAL_DEFAULTS: Final[dict[str, Any]] = {
     # Added to the raw temperature, which the head unit's own warmth raises.
     "temperature_offset": 0.0,
+    # The item the panel wakes on: an entity id, "all" for All lights, or
+    # empty for the top of the list. Sent in the layout (section 9).
+    "wake": "",
 }
 ALL_DEFAULTS: Final[dict[str, Any]] = {**DEFAULTS, LOCAL: LOCAL_DEFAULTS}
+WAKE: Final[Path] = (LOCAL, "wake")
 
 
 def _merge(defaults: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]:

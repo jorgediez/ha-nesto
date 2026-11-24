@@ -49,6 +49,9 @@
       },
       "standby_clock_style": {
         "default": "mdi:clock-outline"
+      },
+      "local_wake": {
+        "default": "mdi:gesture-tap-hold"
       }
     },
     "sensor": {
@@ -116,6 +119,9 @@
     },
     "clear_notification": {
       "service": "mdi:message-off-outline"
+    },
+    "show": {
+      "service": "mdi:gesture-tap-button"
     }
   }
 }

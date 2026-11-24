@@ -218,6 +218,7 @@ async def test_settings_entities(
             "display_timeout_s",
             "standby_mode",
             "standby_clock_style",
+            "local_wake",
             "display_auto_brightness",
             "display_wake_on_motion",
             "display_wake_on_input_when_off",

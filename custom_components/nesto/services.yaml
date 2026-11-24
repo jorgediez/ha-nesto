@@ -66,3 +66,19 @@ clear_notification:
       example: front-door
       selector:
         text:
+
+show:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: nesto
+    entity_id:
+      required: true
+      selector:
+        entity:
+    open:
+      default: false
+      selector:
+        boolean:
