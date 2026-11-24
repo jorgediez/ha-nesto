@@ -112,6 +112,7 @@ async def test_diagnostics_with_status_and_sensors(
     assert "ip" not in result["status"]
     assert result["sensors"] == ["temperature_c"]
     assert result["temperature_offset"] == 0.0
+    assert result["wake"] == ""
 
 
 @pytest.mark.parametrize(

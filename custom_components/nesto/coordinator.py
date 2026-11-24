@@ -17,7 +17,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, __version__ as HA_VERSION
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import (
     area_registry as ar,
     device_registry as dr,
@@ -53,7 +53,7 @@ from .room import (
     diff,
     item_state,
 )
-from .settings import LOCAL, Path, Settings
+from .settings import LOCAL, WAKE, Path, Settings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -376,6 +376,9 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         if not self.settings.set(path, value):
             return
         self.async_update_listeners()
+        if path == WAKE:
+            # It goes in the layout.
+            self._async_room_changed()
         if not self.connected or path[0] == LOCAL:
             return
         try:
@@ -384,6 +387,24 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
             # A broken connection reports itself through on_close, and the
             # settings go with the next synchronisation.
             _LOGGER.debug("Couldn't send the settings: %s", err)
+
+    async def async_show(self, entity_id: str, open_controls: bool) -> None:
+        """Wake the display on an entity's item, open or not (section 13)."""
+        name = self.config_entry.title
+        if self.hello is None or self.hello.caps.get("show") is not True:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="show_unsupported",
+                translation_placeholders={"name": name},
+            )
+        item = self.layout.find(entity_id) if self.layout else None
+        if item is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="not_on_panel",
+                translation_placeholders={"name": name, "entity_id": entity_id},
+            )
+        await self.async_request({"t": "show", "key": item.key, "open": open_controls})
 
     async def async_set_display(self, state: str) -> None:
         """Turn the display active, to standby or off (section 13)."""
@@ -412,6 +433,9 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
             self._keys,
             kinds if isinstance(kinds, list) else (),
         )
+        wake = self.settings.get(WAKE)
+        if wake and (item := layout.find(wake)):
+            layout = replace(layout, wake=item.key)
         if layout.left_out != self._left_out:
             self._left_out = layout.left_out
             if layout.left_out:
@@ -431,6 +455,8 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
         await self._async_send({"t": "states", "full": True, "items": states})
         self._known = states
         self._track(layout)
+        # The Wake on choices follow the items.
+        self.async_update_listeners()
 
     @callback
     def _track(self, layout: Layout) -> None:
@@ -481,7 +507,11 @@ class NestoCoordinator(DataUpdateCoordinator[PanelData]):
     async def _async_send_room_changes(self, sent: Layout) -> None:
         """Send a new layout if it changed, else the states that changed."""
         layout = self.build_layout()
-        if (layout.title, layout.items) != (sent.title, sent.items):
+        if (layout.title, layout.items, layout.wake) != (
+            sent.title,
+            sent.items,
+            sent.wake,
+        ):
             await self._async_send_room(layout)
             return
         # The same items; what waits for a state may differ.

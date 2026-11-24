@@ -91,6 +91,7 @@ async def async_get_config_entry_diagnostics(
         "display": asdict(display) if display is not None else None,
         "settings": settings,
         "temperature_offset": coordinator.settings.get(("local", "temperature_offset")),
+        "wake": coordinator.settings.get(("local", "wake")),
         # The panel's address is left out, like the entry's.
         "status": (
             {k: v for k, v in asdict(status).items() if k != "ip"}
