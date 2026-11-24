@@ -26,8 +26,9 @@ connection with Home Assistant, which pushes what the panel shows and carries
 out what the user does on it. The panel holds no Home Assistant token and
 never talks to the internet.
 
-Tested on a Nest Learning Thermostat (2nd generation) with firmware 0.2.1,
-on its EU base and a USB stand, and against the firmware's simulator.
+Tested on a Nest Learning Thermostat (2nd generation) with firmware 0.3.0,
+on its EU base and a USB stand, and against the firmware's simulator; fans
+and locks only against the simulator.
 
 ## Features
 
