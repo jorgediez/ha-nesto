@@ -120,6 +120,15 @@
               "entities": "Switches, input booleans and fans. Starts with the room's. Drag to change the order the panel shows them in."
             }
           },
+          "media_players": {
+            "name": "Media players",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Speakers, TVs and receivers. Needs Nesto firmware 0.3.0 or later. Starts with the room's. Drag to change the order the panel shows them in."
+            }
+          },
           "scenes": {
             "name": "Scenes",
             "data": {
@@ -142,7 +151,7 @@
       },
       "room_no_area": {
         "title": "The panel's room",
-        "description": "The panel isn't in an area yet. Put it in one on its device page, and the area's lights, switches, fans, scenes, scripts, climate, covers and locks appear here and on the panel. Meanwhile it shows what you pick below.",
+        "description": "The panel isn't in an area yet. Put it in one on its device page, and the area's lights, switches, fans, scenes, scripts, climate, covers, locks and media players appear here and on the panel. Meanwhile it shows what you pick below.",
         "sections": {
           "lights": {
             "name": "Lights",
@@ -189,6 +198,15 @@
             },
             "data_description": {
               "entities": "Switches, input booleans and fans. Drag to change the order the panel shows them in."
+            }
+          },
+          "media_players": {
+            "name": "Media players",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Speakers, TVs and receivers. Needs Nesto firmware 0.3.0 or later. Drag to change the order the panel shows them in."
             }
           },
           "scenes": {
@@ -260,6 +278,15 @@
             },
             "data_description": {
               "entities": "Switches, input booleans and fans. Drag to change the order the panel shows them in."
+            }
+          },
+          "media_players": {
+            "name": "Media players",
+            "data": {
+              "entities": "On the panel, in this order"
+            },
+            "data_description": {
+              "entities": "Speakers, TVs and receivers. Needs Nesto firmware 0.3.0 or later. Drag to change the order the panel shows them in."
             }
           },
           "scenes": {

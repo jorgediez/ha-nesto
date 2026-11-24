@@ -56,6 +56,7 @@ async def test_diagnostics(
             "covers": 0,
             "locks": 0,
             "switches": 0,
+            "media_players": 0,
             "scenes": 0,
             "sensors": 0,
         },

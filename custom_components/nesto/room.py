@@ -2,9 +2,8 @@
 
 PROTOCOL.md appendix A describes the mapping; sections 9 to 11 the messages.
 The options keep one ordered list of entities per section (lights, climate,
-covers, locks, switches, scenes, sensors), which the panel shows in that
-order. In
-room mode the lists start as the area the panel's own device is in, so
+covers, locks, switches, media players, scenes, sensors), which the panel
+shows in that order. In room mode the lists start as the area the panel's own device is in, so
 choosing the panel's area in Home Assistant chooses its room, and they follow
 the area: entities added to it later come after the user's, by name, and the
 ones the user took off stay off. In manual mode the lists are all there is.
@@ -75,12 +74,15 @@ DOMAIN_KINDS: Final = {
     "climate": "climate",
     "cover": "cover",
     "lock": "lock",
+    "media_player": "media_player",
     "sensor": "sensor",
 }
 # What room mode takes from an area: sensors only when the user picks them.
 ROOM_DOMAINS: Final = frozenset(DOMAIN_KINDS) - {"sensor"}
 # Appendix A's order: synthetic "all lights", then these.
-KIND_ORDER: Final = ("light", "climate", "cover", "lock", "switch", "scene", "sensor")
+KIND_ORDER: Final = (
+    "light", "climate", "cover", "lock", "switch", "media_player", "scene", "sensor"
+)  # fmt: skip
 # The options' sections, one per kind, in that order.
 SECTIONS: Final = {
     "lights": "light",
@@ -88,6 +90,7 @@ SECTIONS: Final = {
     "covers": "cover",
     "locks": "lock",
     "switches": "switch",
+    "media_players": "media_player",
     "scenes": "scene",
     "sensors": "sensor",
 }
@@ -95,7 +98,7 @@ SECTION_OF_KIND: Final = {kind: section for section, kind in SECTIONS.items()}
 # Kinds that newer panels draw, and the kind an older one gets instead.
 FALLBACK_KINDS: Final = {"fan": "switch"}
 # Kinds that newer panels draw, left out on an older one.
-NEW_KINDS: Final = frozenset({"lock"})
+NEW_KINDS: Final = frozenset({"lock", "media_player"})
 
 
 def section_domains(section: str) -> list[str]:
@@ -110,6 +113,27 @@ LOCK_OPEN: Final = 1  # LockEntityFeature.OPEN
 LOCK_STATES: Final = frozenset(
     {"locked", "unlocked", "locking", "unlocking", "jammed", "open", "opening"}
 )
+# MediaPlayerEntityFeature: each panel feature, and the bits it needs.
+MEDIA_FEATURES: Final = {
+    "volume": 4,  # VOLUME_SET
+    "mute": 8,  # VOLUME_MUTE
+    "play_pause": 16384 | 1,  # PLAY and PAUSE
+    "tracks": 32 | 16,  # NEXT_TRACK and PREVIOUS_TRACK
+    "power": 128 | 256,  # TURN_ON and TURN_OFF
+}
+MEDIA_SELECT_SOURCE: Final = 2048
+MEDIA_STATES: Final = frozenset(
+    {"off", "on", "idle", "playing", "paused", "standby", "buffering"}
+)
+# Each media player intent: the feature it needs, and its service.
+MEDIA_ACTIONS: Final = {
+    "play": ("play_pause", "media_play"),
+    "pause": ("play_pause", "media_pause"),
+    "next": ("tracks", "media_next_track"),
+    "previous": ("tracks", "media_previous_track"),
+    "turn_on": ("power", "turn_on"),
+    "turn_off": ("power", "turn_off"),
+}
 CLIMATE_TARGET: Final = 1  # ClimateEntityFeature.TARGET_TEMPERATURE
 CLIMATE_RANGE: Final = 2  # ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
 COVER_OPEN, COVER_CLOSE, COVER_POSITION, COVER_STOP = 1, 2, 4, 8
@@ -155,6 +179,7 @@ DEVICE_CLASS_ICONS: Final = {
     ("cover", "door"): "door",
     ("sensor", "temperature"): "thermometer",
     ("sensor", "humidity"): "water",
+    ("media_player", "tv"): "tv",
 }
 DOMAIN_ICONS: Final = {
     "fan": "fan",
@@ -436,6 +461,8 @@ def entity_item(
     elif kind == "lock":
         supported = attributes.get(ATTR_SUPPORTED_FEATURES, 0)
         features = {"open": bool(supported & LOCK_OPEN)}
+    elif kind == "media_player":
+        features = media_features(attributes)
     elif kind == "sensor":
         unit = attributes.get(ATTR_UNIT_OF_MEASUREMENT)
         features = {"unit": unit} if unit else {}
@@ -545,6 +572,18 @@ def fan_features(attributes: Mapping[str, Any]) -> dict[str, Any]:
     return features
 
 
+def media_features(attributes: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a media player's features: what the panel can do with it."""
+    supported = attributes.get(ATTR_SUPPORTED_FEATURES, 0)
+    features: dict[str, Any] = {
+        name: supported & bits == bits for name, bits in MEDIA_FEATURES.items()
+    }
+    sources = attributes.get("source_list")
+    if supported & MEDIA_SELECT_SOURCE and sources:
+        features["sources"] = _clip_list(sources)
+    return features
+
+
 def builtin_icon(icon: object) -> str | None:
     """Return the built-in icon (appendix C) closest to a Material Design one."""
     if not isinstance(icon, str) or not icon.startswith("mdi:"):
@@ -586,6 +625,10 @@ def _short_name(name: str, area: ar.AreaEntry | None) -> str:
 
 def _clip(text: str) -> str:
     return text if len(text) <= MAX_NAME else text[: MAX_NAME - 1] + "…"
+
+
+def _clip_or_none(value: object) -> str | None:
+    return None if value is None else _clip(str(value))
 
 
 def _clip_list(values: Iterable[Any]) -> list[str]:
@@ -641,6 +684,16 @@ def item_state(hass: HomeAssistant, item: Item) -> dict[str, Any]:
         }
     elif item.kind == "lock":
         fields = {"state": state.state if state.state in LOCK_STATES else None}
+    elif item.kind == "media_player":
+        volume = attributes.get("volume_level")
+        fields = {
+            "state": state.state if state.state in MEDIA_STATES else None,
+            "volume": round(volume * 100) if isinstance(volume, (int, float)) else None,
+            "muted": bool(attributes.get("is_volume_muted")),
+            "title": _clip_or_none(attributes.get("media_title")),
+            "artist": _clip_or_none(attributes.get("media_artist")),
+            "source": _clip_or_none(attributes.get("source")),
+        }
     elif item.kind == "sensor":
         fields = {"value": sensor_value(hass, state)}
     else:
@@ -778,6 +831,8 @@ def service_call(
             return _climate_call(item, action, args)
         if item.kind == "fan":
             return _fan_call(item, action, args)
+        if item.kind == "media_player":
+            return _media_call(item, action, args)
         if item.kind == "lock" and action in ("lock", "unlock"):
             return "lock", action, {}
         if item.kind == "lock" and action == "open" and item.features.get("open"):
@@ -844,6 +899,26 @@ def _fan_call(
     if action == "set_direction" and features.get("direction"):
         direction = vol.In(FAN_DIRECTIONS)(args.get("direction"))
         return "fan", "set_direction", {"direction": direction}
+    raise IntentError("unsupported", f"{item.name} can't {action}")
+
+
+def _media_call(
+    item: Item, action: str, args: Mapping[str, Any]
+) -> tuple[str, str, dict[str, Any]]:
+    features = item.features
+    if action in MEDIA_ACTIONS and features.get(MEDIA_ACTIONS[action][0]):
+        return "media_player", MEDIA_ACTIONS[action][1], {}
+    if action == "set_volume" and features.get("volume"):
+        volume = PERCENT(args.get("volume"))
+        return "media_player", "volume_set", {"volume_level": volume / 100}
+    if action == "mute" and features.get("mute"):
+        muted = BOOLEAN(args.get("muted"))
+        return "media_player", "volume_mute", {"is_volume_muted": muted}
+    if action == "select_source":
+        value = args.get("source")
+        if value not in features.get("sources", []):
+            raise IntentError("unsupported", f"{item.name} has no source {value}")
+        return "media_player", "select_source", {"source": value}
     raise IntentError("unsupported", f"{item.name} can't {action}")
 
 
