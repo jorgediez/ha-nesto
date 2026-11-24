@@ -1154,3 +1154,212 @@ async def test_lock_intents_refused(
 ) -> None:
     answer = await intent(hass, clients, name, action)
     assert answer[:2] == (5, "unsupported")
+
+
+# Media players -----------------------------------------------------------------
+
+SPEAKER = {
+    "friendly_name": "Speaker",
+    # Every feature the panel uses: volume, mute, play and pause, tracks,
+    # sources, on and off.
+    "supported_features": 4 | 8 | 16384 | 1 | 32 | 16 | 2048 | 128 | 256,
+    "volume_level": 0.305,
+    "is_volume_muted": False,
+    "media_title": "Morning tide",
+    "media_artist": "The Keepers",
+    "source": "Radio",
+    "source_list": ["Radio", "Turntable"],
+}
+MEDIA = {
+    "media_player.speaker": ("paused", SPEAKER),
+    # Off, with only power and a source list it can't select from.
+    "media_player.tv": (
+        "off",
+        {
+            "friendly_name": "TV",
+            "device_class": "tv",
+            "supported_features": 128 | 256,
+            "source_list": ["HDMI 1"],
+        },
+    ),
+    # Play without pause, next without previous: neither control.
+    "media_player.cast": (
+        "unknown",
+        {"friendly_name": "Cast", "supported_features": 16384 | 32},
+    ),
+}
+MEDIA_OPTIONS = {
+    CONF_MODE: MODE_MANUAL,
+    "lights": ["light.lamp"],
+    "switches": ["switch.fan_plug"],
+    "media_players": list(MEDIA),
+}
+
+
+@pytest.fixture
+def media_states(hass: HomeAssistant, area: ar.AreaEntry) -> None:
+    for entity_id, (state, attributes) in MEDIA.items():
+        hass.states.async_set(entity_id, state, attributes)
+
+
+@pytest.fixture
+async def media(
+    hass: HomeAssistant, media_states: None, config_entry: MockConfigEntry, clients
+) -> MockConfigEntry:
+    """A panel that draws media players, showing them among other kinds."""
+    clients.hello = make_hello(
+        caps={
+            "beeper": True,
+            "input": ["ring", "press"],
+            "kinds": [*KINDS, "media_player"],
+        }
+    )
+    await setup_with(hass, config_entry, MEDIA_OPTIONS)
+    yield config_entry
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+async def test_media_players_on_a_panel_that_draws_them(
+    hass: HomeAssistant, media: MockConfigEntry, clients: ClientFactory
+) -> None:
+    client = clients.last
+    layout = last(client, "layout")
+    # After the switches.
+    assert [(i["name"], i["kind"]) for i in layout["items"]] == [
+        ("Reading lamp", "light"),
+        ("Fan plug", "switch"),
+        ("Speaker", "media_player"),
+        ("TV", "media_player"),
+        ("Cast", "media_player"),
+    ]
+    names = items_by_name(layout)
+    # No icon but the TV's: the panel's default is a speaker.
+    assert names["Speaker"] == {
+        "key": names["Speaker"]["key"],
+        "kind": "media_player",
+        "name": "Speaker",
+        "features": {
+            "volume": True,
+            "mute": True,
+            "play_pause": True,
+            "tracks": True,
+            "power": True,
+            "sources": ["Radio", "Turntable"],
+        },
+    }
+    assert names["TV"]["icon"] == "tv"
+    assert names["TV"]["features"] == {
+        "volume": False,
+        "mute": False,
+        "play_pause": False,
+        "tracks": False,
+        "power": True,
+    }
+    assert not any(names["Cast"]["features"].values())
+
+    states = last(client, "states")["items"]
+    assert states[names["Speaker"]["key"]] == {
+        "available": True,
+        "state": "paused",
+        "volume": 30,
+        "muted": False,
+        "title": "Morning tide",
+        "artist": "The Keepers",
+        "source": "Radio",
+    }
+    assert states[names["TV"]["key"]] == {
+        "available": True,
+        "state": "off",
+        "volume": None,
+        "muted": False,
+        "title": None,
+        "artist": None,
+        "source": None,
+    }
+    assert states[names["Cast"]["key"]]["state"] is None
+
+    hass.states.async_set(
+        "media_player.speaker",
+        "playing",
+        SPEAKER | {"media_title": "Second song", "volume_level": 0.5},
+    )
+    await hass.async_block_till_done()
+    assert last(client, "states")["items"] == {
+        names["Speaker"]["key"]: {
+            "state": "playing",
+            "title": "Second song",
+            "volume": 50,
+        }
+    }
+
+
+async def test_media_players_are_left_out_on_an_older_panel(
+    hass: HomeAssistant, media_states: None, config_entry: MockConfigEntry, clients
+) -> None:
+    await setup_with(hass, config_entry, MEDIA_OPTIONS)
+    layout = last(clients.last, "layout")
+    assert [i["name"] for i in layout["items"]] == ["Reading lamp", "Fan plug"]
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+@pytest.mark.parametrize(
+    ("action", "args", "service", "data"),
+    [
+        ("set_volume", {"volume": 35}, "volume_set", {"volume_level": 0.35}),
+        ("mute", {"muted": True}, "volume_mute", {"is_volume_muted": True}),
+        ("play", {}, "media_play", {}),
+        ("pause", {}, "media_pause", {}),
+        ("next", {}, "media_next_track", {}),
+        ("previous", {}, "media_previous_track", {}),
+        (
+            "select_source",
+            {"source": "Turntable"},
+            "select_source",
+            {"source": "Turntable"},
+        ),
+        ("turn_on", {}, "turn_on", {}),
+        ("turn_off", {}, "turn_off", {}),
+    ],
+)
+async def test_media_intents(
+    hass: HomeAssistant,
+    media: MockConfigEntry,
+    clients: ClientFactory,
+    action: str,
+    args: dict[str, Any],
+    service: str,
+    data: dict[str, Any],
+) -> None:
+    calls = async_mock_service(hass, "media_player", service)
+    answer = await intent(hass, clients, "Speaker", action, **args)
+    assert answer == (5,)
+    assert len(calls) == 1
+    assert calls[0].data == {"entity_id": ["media_player.speaker"], **data}
+
+
+@pytest.mark.parametrize(
+    ("name", "action", "args", "code"),
+    [
+        ("TV", "set_volume", {"volume": 20}, "unsupported"),
+        ("TV", "play", {}, "unsupported"),
+        ("TV", "select_source", {"source": "HDMI 1"}, "unsupported"),
+        ("Cast", "play", {}, "unsupported"),
+        ("Cast", "next", {}, "unsupported"),
+        ("Speaker", "select_source", {"source": "Tape"}, "unsupported"),
+        ("Speaker", "toggle", {}, "unsupported"),
+        ("Speaker", "set_volume", {"volume": 140}, "bad_request"),
+        ("Speaker", "set_volume", {}, "bad_request"),
+        ("Speaker", "mute", {"muted": "yes"}, "bad_request"),
+    ],
+)
+async def test_media_intents_refused(
+    hass: HomeAssistant,
+    media: MockConfigEntry,
+    clients: ClientFactory,
+    name: str,
+    action: str,
+    args: dict[str, Any],
+    code: str,
+) -> None:
+    answer = await intent(hass, clients, name, action, **args)
+    assert answer[:2] == (5, code)
